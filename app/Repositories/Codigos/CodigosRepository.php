@@ -202,6 +202,7 @@ class  CodigosRepository extends BaseRepository
             'asesor_id'                 => 0,
             'combo'                     => null,
             'documento_devolucion'      => null,
+            'permitir_devolver_nota'    => '0',
         ];
         $arrayPaquete = [
             'codigo_paquete'            => null,
@@ -356,7 +357,7 @@ class  CodigosRepository extends BaseRepository
             $withCodigoUnion        = 1;
             $arrayCombinar          = [];
             $unionCorrecto          = false;
-            $messageIngreso         = "Problema con el código union $codigo_union";
+            $messageIngreso         = "";
             $arrayCombinar          = [ 'documento_devolucion' => $codigo_ven ];
             $estadoIngreso          = 0;
             ///estadoIngreso => 1 = ingresado; 2 = no se puedo ingresar el codigo de union;
@@ -426,7 +427,7 @@ class  CodigosRepository extends BaseRepository
             ];
         }
     }
-    public function updateDevolucion($codigo,$codigo_union,$objectCodigoUnion,$request,$ifGuardarProforma=0,$codigo_liquidacion=null,$proforma_empresa=null,$codigo_proforma=null){
+    public function updateDevolucion($codigo,$codigo_union,$objectCodigoUnion,$request,$ifGuardarProforma=0,$codigo_liquidacion=null,$proforma_empresa=null,$codigo_proforma=null,$tipo_importacion=null){
         try{
             $withCodigoUnion = 1;
             $estadoIngreso   = 0;
@@ -445,6 +446,11 @@ class  CodigosRepository extends BaseRepository
             //para colocar como que se quiso devolver el codigo pero la pre factura ya se envio a perseo
             if($ifGuardarProforma == 2)                 { $arrayCombinar = $arrayProforma; }
             else                                        { $arrayCombinar = array_merge($datosUpdate, $arrayProforma); }
+            //limpiar paquete 
+            $arrayPaquete = ['codigo_paquete' => null];
+            if($tipo_importacion == 1){
+                $arrayCombinar = array_merge($arrayCombinar, $arrayPaquete);
+            }
             //si hay codigo de union lo actualizo
             if($withCodigoUnion == 1){
                 //VALIDO SI NO EXISTE EL CODIGO DE UNION LO MANDO COMO ERROR
@@ -474,30 +480,29 @@ class  CodigosRepository extends BaseRepository
                     }
                     //====PROFORMA============================================
                     //ifdevuelto_proforma => 0 => nada; 1 => devuelta antes del enviar el pedido; 2 => enviada despues de enviar al pedido
-                    if($ifproforma_empresa > 0 && $ifdevuelto_proforma != 1){
-                        $ifErrorProforma                = 0;
-                        $datosProforma                  = $this->validateProforma($ifdevuelto_proforma,$ifcodigo_proforma,$ifproforma_empresa);
-                        $ifErrorProforma                = $datosProforma["ifErrorProforma"];
-                        $messageIngreso                 = $datosProforma["messageProforma"];
-                        $ifsetProforma                  = $datosProforma["ifsetProforma"];
-                        if($ifsetProforma == 1 && $ifErrorProforma == 0)    { $unionCorrecto = true; }
-                        else                                                { $unionCorrecto = false; }
-                    }
+                    // if($ifproforma_empresa > 0 && $ifdevuelto_proforma != 1){
+                    //     $ifErrorProforma                = 0;
+                    //     $datosProforma                  = $this->validateProforma($ifdevuelto_proforma,$ifcodigo_proforma,$ifproforma_empresa);
+                    //     $ifErrorProforma                = $datosProforma["ifErrorProforma"];
+                    //     $messageIngreso                 = $datosProforma["messageProforma"];
+                    //     $ifsetProforma                  = $datosProforma["ifsetProforma"];
+                    //     if($ifsetProforma == 1 && $ifErrorProforma == 0)    { $unionCorrecto = true; }
+                    //     else                                                { $unionCorrecto = false; }
+                    // }
                     //====PROFORMA============================================
                     //==PROCESO====
                     ///correcto o que la proforma se vaya a estado 2 que es para asignar que devolvio despues de enviar de perseo
                     if($unionCorrecto || $ifGuardarProforma == 2){
+                        if($unionCorrecto){
+                            $estadoIngreso = 1;
+                        }
                         //PROFORMA
                         //regresar el stock
                         if($ifGuardarProforma == 1){
-                            if($ifsetProforma == 1){
-                                $getEstadoIngreso = $this->validacionIngresoDevolucionPrefactura($codigo_liquidacion,$proforma_empresa,$codigo_proforma);
-                                $estadoIngreso    = $getEstadoIngreso["estadoIngreso"];
-                                $messageIngreso   = $getEstadoIngreso["messageIngreso"];
-                            }
-                        }
-                        if($unionCorrecto){
-                            $estadoIngreso = 1;
+                            $getEstadoIngreso = $this->validacionIngresoDevolucionPrefactura($codigo_liquidacion,$proforma_empresa,$codigo_proforma);
+                            $estadoIngreso    = $getEstadoIngreso["estadoIngreso"];
+                            $messageIngreso   = $getEstadoIngreso["messageIngreso"];
+                            
                         }
                         if($estadoIngreso == 1 || $ifGuardarProforma == 2){
                             //PROFORMA
