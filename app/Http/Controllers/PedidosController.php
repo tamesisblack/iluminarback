@@ -7390,16 +7390,18 @@ class PedidosController extends Controller
                 'p.total_venta',
                 DB::raw("(SELECT COUNT(*) FROM verificaciones v WHERE v.contrato = p.contrato_generado AND v.nuevo = '1' AND v.estado = '0') as verificaciones"),
                 'p.TotalVentaReal',
-                DB::raw("(SELECT DISTINCT l.doc_valor FROM 1_4_documento_liq l WHERE l.periodo_id = {$periodo} AND l.id_pedido = p.id_pedido AND l.tipo_pago_id = '4') AS valor_convenio"),
+                DB::raw("(SELECT DISTINCT SUM(l.doc_valor) FROM 1_4_documento_liq l WHERE l.periodo_id = {$periodo} AND l.id_pedido = p.id_pedido AND l.tipo_pago_id = '4'AND l.estado ='1') AS valor_convenio"),
+                DB::raw("(SELECT DISTINCT SUM(l.doc_valor) FROM 1_4_documento_liq l WHERE l.periodo_id = {$periodo} AND l.id_pedido = p.id_pedido AND l.tipo_pago_id = '2'AND l.estado ='1') AS valor_liquidacion"),
+                DB::raw("(SELECT DISTINCT SUM(l.doc_valor) FROM 1_4_documento_liq l WHERE l.periodo_id = {$periodo} AND l.id_pedido = p.id_pedido AND l.tipo_pago_id = '6'AND l.estado ='1') AS valor_deudaAnterior"),
                 'p.descuento',
                 'p.convenio_anios',
-                DB::raw("(SELECT DISTINCT l.doc_valor FROM 1_4_documento_liq l WHERE l.periodo_id = {$periodo} AND l.id_pedido = p.id_pedido AND l.ifAntAprobado = '1' AND l.estado = '1') AS valor_anticipos")
+                DB::raw("(SELECT DISTINCT SUM(l.doc_valor) FROM 1_4_documento_liq l WHERE l.periodo_id = {$periodo} AND l.id_pedido = p.id_pedido AND l.ifAntAprobado = '1' AND l.estado = '1') AS valor_anticipos")
             )
             ->leftJoin('institucion as i', 'i.idInstitucion', '=', 'p.id_institucion')
             ->leftJoin('usuario as usu', 'usu.idusuario', '=', 'p.id_asesor')
             ->where('p.id_periodo', '=', $periodo)
             ->where('p.estado', '=', '1')
-            ->where('p.tipo_venta', '=', '1')
+            ->where('p.tipo_venta', '=', '2')
             ->whereNotNull('p.contrato_generado')
             ->get();
         foreach($liquidaciones as $key => $item){
