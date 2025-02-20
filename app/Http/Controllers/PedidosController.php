@@ -6887,7 +6887,6 @@ class PedidosController extends Controller
             'ifAprobarPendientes'   => 'required|boolean',
             'ven_codigoPadre'       => 'nullable|string',
         ]);
-
         try {
             DB::beginTransaction();
 
@@ -6921,7 +6920,7 @@ class PedidosController extends Controller
             return response()->json(['status' => '1', 'message' => 'Guías guardadas correctamente'], 200);
         } catch (\Exception $ex) {
             DB::rollBack();
-            return ["status" => "0", "message" => "Error: " . $ex->getMessage()];
+            return ["status" => "0", "message" => $ex->getMessage()];
         }
     }
 
