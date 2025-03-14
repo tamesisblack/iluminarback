@@ -1161,6 +1161,7 @@ Route::get('get_pedidos_periodoxContrato/{contrato}', 'PedidosController@get_ped
 Route::get('get_pedidos_periodo_Only_contrato/{contrato}/{beneficiario}', 'PedidosController@get_pedidos_periodo_Only_contrato');
 Route::get('getConvenio','PedidosController@getConvenio');
 Route::get('getConvenioGlobalActivo','PedidosController@getConvenioGlobalActivo');
+Route::get('getConvenioGlobalActivoXPeriodo','PedidosController@getConvenioGlobalActivoXPeriodo');
 Route::get('getAnticipoPedido','PedidosController@getAnticipoPedido');
 Route::get('get_pedidos_periodo_Only_pedido/{contrato}/{beneficiario}', 'PedidosController@get_pedidos_periodo_Only_pedido');
 Route::get('get_pedidos_asesor/{periodo}/{asesor}', 'PedidosController@get_pedidos_asesor');
@@ -1218,6 +1219,7 @@ Route::get('GetEvidenciasGlobalxID','AbonoController@GetEvidenciasGlobalxID');
 Route::get('VerifcarMetodosGet_AbonoRetencionPorcentaje','AbonoRetencionPorcentajeController@VerifcarMetodosGet_AbonoRetencionPorcentaje');
 Route::get('get_VerificacionAntesEliminarPedido','PedidosController@get_VerificacionAntesEliminarPedido');
 Route::get('getSeries_EdicionStock','SeriesController@getSeries_EdicionStock');
+Route::get('VerifcarMetodosGet_UsuarioController','UsuarioController@VerifcarMetodosGet_UsuarioController');
 Route::post('Post_modificar_cabecera_devolucion', 'DevolucionController@Post_modificar_cabecera_devolucion');
 Route::post('GuardarDatosEdicionStockMasiva', '_14ProductoController@GuardarDatosEdicionStockMasiva');
 Route::post('MoverInstitucionxAsesor', 'InstitucionController@MoverInstitucionxAsesor');
@@ -1228,7 +1230,6 @@ Route::post('VerifcarMetodosPost_AbonoRetencionPorcentaje','AbonoRetencionPorcen
 Route::post('EliminarPedidoCompleto_SinContrato','PedidosController@EliminarPedidoCompleto_SinContrato');
 Route::post('Regresar_A_Pendiente_Documento','VentasController@Regresar_A_Pendiente_Documento');
 //FIN APIS JEYSON LARA
-
 //GUARDAR ANTICIPOS APROBADOS DESPUES DE GENERAR EL CONTRATO
 Route::post('guardarAnticipoAprobadoContrato', 'PedidosController@guardarAnticipoAprobadoContrato');
 Route::post('updateThePedido','PedidosController@updateThePedido');
@@ -1954,9 +1955,13 @@ Route::post('PostSucursalesInstitucion_Registrar_modificar','InstitucionSucursal
 Route::post('Post_Eliminar_SucursalesInstitucion','InstitucionSucursalesController@Post_Eliminar_SucursalesInstitucion');
 Route::post('Desactivar_SucursalesInstitucion','InstitucionSucursalesController@Desactivar_SucursalesInstitucion');
 //FIN INSTITUCION SUCURSALES
+//REPORTE DESPACHADOS
+Route::get('despachos', 'VentasController@despachos');
+//FIN REPORTE DESPACHADOS
 //FIN FACTURACION 10_10_1_4
 Route::resource('empresa','_14EmpresaController');
-
+Route::get('usuarioConVentas/{cedula}','UsuarioController@usuarioConVentas');
+Route::post('CambiarEmpresaPedido', 'ProformaController@CambiarEmpresaPedido');
 
 ///=======FACTURACION=========
 require_once "others/facturacion/inventario/RouterInventario.php";
@@ -2052,3 +2057,4 @@ Route::post('new_novedades', 'InstitucionController@new_novedades_add');
 Route::group([], function () {
     Route::resource('/prefactura_documentos', 'PrefacturaController');
 });
+Route::post('getEvaluacionesAdminPeriodo', 'EvaluacionController@getEvaluacionesUltimoPeriodo');
