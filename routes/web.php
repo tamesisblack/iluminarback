@@ -1224,6 +1224,7 @@ Route::get('VerifcarMetodosGet_AbonoRetencionPorcentaje','AbonoRetencionPorcenta
 Route::get('get_VerificacionAntesEliminarPedido','PedidosController@get_VerificacionAntesEliminarPedido');
 Route::get('getSeries_EdicionStock','SeriesController@getSeries_EdicionStock');
 Route::get('VerifcarMetodosGet_UsuarioController','UsuarioController@VerifcarMetodosGet_UsuarioController');
+Route::get('Get_Estado_Venta','Pedidos2Controller@Get_Estado_Venta');
 Route::post('Post_modificar_cabecera_devolucion', 'DevolucionController@Post_modificar_cabecera_devolucion');
 Route::post('GuardarDatosEdicionStockMasiva', '_14ProductoController@GuardarDatosEdicionStockMasiva');
 Route::post('MoverInstitucionxAsesor', 'InstitucionController@MoverInstitucionxAsesor');
@@ -1884,6 +1885,7 @@ Route::get('Get_Cod_Pro','ProformaController@Get_Cod_Pro');
 Route::get('Get_MinStock','ProformaController@Get_MinStock');
 Route::get('GetProformaGeneral','ProformaController@GetProformaGeneral');
 Route::get('GetProfarmas','ProformaController@GetProfarmas');
+Route::get('GetProformasSolicitud','ProformaController@GetProformasSolicitud');
 Route::get('Get_DatosFactura','ProformaController@Get_DatosFactura');
 Route::get('Get_DatoSolicitud','ProformaController@Get_DatoSolicitud');
 Route::get('Get_pedidoSolicitud','ProformaController@Get_pedidoSolicitud');
@@ -1897,9 +1899,13 @@ Route::get('InfoAgrupadoPedido/{codigo}/{periodo}','ProformaController@InfoAgrup
 Route::get('InfoClienteAgrupado/{codigo}/{periodo}','ProformaController@InfoClienteAgrupado');
 Route::get('Get_proformasCliente','ProformaController@Get_proformasCliente');
 Route::post('Proforma_Registrar_modificar','ProformaController@Proforma_Registrar_modificar');
+Route::post('Proforma_Registrar_modificar_solicitud','ProformaController@Proforma_Registrar_modificar_solicitud');
 Route::post('PostProforma_Editar','ProformaController@PostProforma_Editar');
+Route::post('PostProforma_Editar_solicitud','ProformaController@PostProforma_Editar_solicitud');
 Route::post('PostProformaDetalle_Editar','ProformaController@PostProformaDetalle_Editar');
 Route::post('Desactivar_Proforma','ProformaController@Desactivar_Proforma');
+Route::post('AceptarSolicitudProforma','ProformaController@AceptarSolicitudProforma');
+Route::post('AprobarProforma','ProformaController@AprobarProforma');
 Route::post('DesactivarProforma','ProformaController@DesactivarProforma');
 Route::post('Eliminar_DetaProforma','ProformaController@Eliminar_DetaProforma');
 Route::post('Eliminar_Proforma','ProformaController@Eliminar_Proforma');
@@ -1957,6 +1963,8 @@ Route::post('PostSucursalesInstitucion_Registrar_modificar','InstitucionSucursal
 Route::post('Post_Eliminar_SucursalesInstitucion','InstitucionSucursalesController@Post_Eliminar_SucursalesInstitucion');
 Route::post('Desactivar_SucursalesInstitucion','InstitucionSucursalesController@Desactivar_SucursalesInstitucion');
 //FIN INSTITUCION SUCURSALES
+Route::resource('empresa','_14EmpresaController');
+Route::post('verificarStock', 'VentasController@verificarStock');
 //REPORTE DESPACHADOS
 Route::get('despachos', 'VentasController@despachos');
 //FIN REPORTE DESPACHADOS
@@ -2070,5 +2078,5 @@ Route::post('new_novedades', 'InstitucionController@new_novedades_add');
 Route::group([], function () {
     Route::resource('/prefactura_documentos', 'PrefacturaController');
 });
-Route::post('getEvaluacionesAdminPeriodo', 'EvaluacionController@getEvaluacionesUltimoPeriodo');
 Route::get('cod_evaluacion_institucion/{id}','InstitucionController@cod_evaluacion_institucion');
+Route::post('contarLibrosPorPeriodo','PedidosController@contarLibrosPorPeriodo');

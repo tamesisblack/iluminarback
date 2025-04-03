@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\NotificacionGeneral;
+use App\Repositories\pedidos\NotificacionRepository;
 use Pusher\Pusher;
 class NotificacionController extends Controller
 {
@@ -13,6 +14,11 @@ class NotificacionController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
+    public $NotificacionRepository;
+    public function __construct(NotificacionRepository $NotificacionRepository)
+    {
+        $this->NotificacionRepository   = $NotificacionRepository;
+    }
     //api:get/notificaciones
     public function index()
     {
@@ -42,12 +48,16 @@ class NotificacionController extends Controller
 
         // Verificar si ya existe una notificación con id_padre y estado 0
         $notificacion = NotificacionGeneral::where('id_padre', $validatedData['id_padre'])
+            ->where('tipo', $validatedData['tipo']) // Agregamos la condición para tipo
+            ->where('estado', 0)
             ->first();
 
         if ($notificacion) {
             //si es estado 0  mostrar un mensaje con status 2 ya fue notificado a facturacion
-            if($notificacion->estado == 0){
+            if($notificacion->estado == 0 && ($validatedData['tipo'] == 0 || $validatedData['tipo'] == 3)){
                 return ["status" => "2", "message" => "Ya fue notificado a facturación"];
+            }else if($notificacion->estado == 0){
+                return ["status" => "2", "message" => "Existe una notificación de ".$request->nombre." para este pedido"];
             }
             // Actualizar la notificación existente
             $notificacion->fill([
@@ -63,6 +73,25 @@ class NotificacionController extends Controller
             // Crear una nueva notificación
             $notificacion = new NotificacionGeneral($validatedData);
             $success      = $notificacion->save();
+        }
+
+        if($success){
+            if($validatedData['tipo'] == 0 || $validatedData['tipo'] == 3){
+                $channel = 'admin.notifications_verificaciones';
+                $event = 'NewNotification';
+                $data = [
+                    'message' => 'Nueva notificación',
+                ];
+                $this->NotificacionRepository->notificacionVerificaciones($channel, $event, $data);
+            }
+            if($validatedData['tipo'] == 2){
+                $channel = 'asesor.notificacionVerificacion';
+                $event = 'NewNotification';
+                $data = [
+                    'message' => 'Nueva notificación',
+                ];
+                $this->NotificacionRepository->notificacionVerificaciones($channel, $event, $data);
+            }
         }
 
         // Retornar la respuesta

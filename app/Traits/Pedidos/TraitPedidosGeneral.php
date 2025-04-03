@@ -10,10 +10,10 @@ use Illuminate\Support\Facades\Http;
 trait TraitPedidosGeneral
 {
     //=====PERSEO=======
-    public $api_keyProlipaProduction    = "RfVaC9hIMhn49J4jSq2_I7GbWYHrlGRtitYwIuTepQg-";
-    public $api_keyCalmedProduction     = "RfVaC9hIMhn49J4jSq2_IzB1.iNzqGb9M38jmd1DfQs-";
-    public $api_keyProlipaLocal         = "RfVaC9hIMhn49J4jSq2_I_.QLazmDGrbZQ8o8ePUEcU-";
-    public $api_keyCalmedLocal          = "RfVaC9hIMhn49J4jSq2_I91geWPRm0IWEft2beVW9NI-";
+    public $api_keyProlipaProduction    = "RfVaC9hIMhn49J4jSq2_I_50FLWFrX8qOhXa9PacnqU-";
+    public $api_keyCalmedProduction     = "RfVaC9hIMhn49J4jSq2_I8kXMeIRjM.3WlDNPyOqfu0";
+    public $api_keyProlipaLocal         = "RfVaC9hIMhn49J4jSq2_IzB1.iNzqGb9M38jmd1DfQs-";
+    public $api_keyCalmedLocal          = "RfVaC9hIMhn49J4jSq2_I5FdjyUYFOLEGVaHnPJ9Pyw-";
     //=====END PERSEO=======
     //=====SOLINFA==========
     public $api_KeyGONZALEZ             = "RfVaC9hIMhn49J4jSq2_Iw3h5qF1Dg0ecy.kFTzdqnA-";
@@ -243,9 +243,6 @@ trait TraitPedidosGeneral
         ");
         return $query;
     }
-    public function updateDatosVerificacionPorIngresar($contrato,$estado){
-        $query = Pedidos::Where('contrato_generado','=',$contrato)->update(['datos_verificacion_por_ingresar' => $estado]);
-    }
     //asesores que tiene pedidos
     public function getAsesoresPedidos(){
         $query = DB::SELECT("SELECT DISTINCT p.id_asesor,
@@ -357,8 +354,9 @@ trait TraitPedidosGeneral
         return $query;
     }
     public function tr_getDocumentos($ca_codigo_agrupado){
-        $query = DB::SELECT("SELECT DISTINCT fv.ven_codigo FROM f_venta fv
+        $query = DB::SELECT("SELECT DISTINCT fv.ven_codigo, fv.est_ven_codigo, ev.est_ven_nombre FROM f_venta fv
         INNER JOIN f_proforma fpr ON fpr.prof_id = fv.ven_idproforma
+        LEFT JOIN 1_4_estado_venta ev on fv.est_ven_codigo = ev.est_ven_codigo
         WHERE fpr.idPuntoventa = '$ca_codigo_agrupado'
         AND fv.est_ven_codigo <> 3
         ");
