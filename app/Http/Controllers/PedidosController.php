@@ -1942,86 +1942,86 @@ class PedidosController extends Controller
     }
     public function get_pedidos_periodo($periodo,$rol,$idusuario)
     {
-        try {
-            $pedidos = [];
-            $response = [];
-            if($rol == 1)   { $pedidos = $this->getPedido(5,$periodo); }
-            if($rol == 23)  { $pedidos = $this->getPedido(1,$periodo); }
-            if($rol == 11)  { $pedidos = $this->getPedido(2,$periodo,$idusuario); }
-            if(count($pedidos)==0){
-                return $pedidos;
-            }
-            foreach($pedidos as $key => $item){
-                $response[$key] = [
-                    'id_pedido'                     => $item->id_pedido,
-                    'id_asesor'                     => $item->id_asesor,
-                    'id_periodo'                    => $item->id_periodo,
-                    'tipo_venta'                    => $item->tipo_venta,
-                    'tipo_venta_descr'              => $item->tipo_venta_descr,
-                    'estado'                        => $item->estado,
-                    'id_institucion'                => $item->id_institucion,
-                    'descuento'                     => $item->descuento,
-                    'anticipo'                      => $item->anticipo,
-                    'ifanticipo'                    => $item->ifanticipo,
-                    'anticipo_aprobado'             => $item->anticipo_aprobado,
-                    'ifagregado_anticipo_aprobado'  => $item->ifagregado_anticipo_aprobado,
-                    'deuda'                         => $item->deuda,
-                    'convenio_anios'                => $item->convenio_anios,
-                    'id_responsable'                => $item->id_responsable,
-                    'total_unidades'                => $item->total_unidades,
-                    'contrato_generado'             => $item->contrato_generado,
-                    'observacion'                   => $item->observacion,
-                    'imagen'                        => $item->imagen,
-                    'convenio_anios'                => $item->convenio_anios,
-                    'facturacion_vee'               => $item->facturacion_vee,
-                    'estado_verificacion'           => $item->estado_verificacion,
-                    'notificados'                   => $item->notificados,
-                    'totalPendienteLiquidar'        => $item->totalPendienteLiquidar,
-                    'totalValorComision'            => $item->totalValorComision,
-                    'totalPagado'                   => $item->totalPagado,
-                    'TotalVentaReal'                => $item->TotalVentaReal,
-                    'totalDeudaProxima'             => $item->totalDeudaProxima,
-                    'solicitud_gerencia_estado'     => $item->solicitud_gerencia_estado,
-                    'updated_at'                    => $item->updated_at,
-                    'estado_librosObsequios'        => $item->estado_librosObsequios,
-                    'deuda_anterior_estado'         => $item->deuda_anterior_estado,
-                    'nombreInstitucion'             => $item->nombreInstitucion,
-                    'nombre_ciudad'                 => $item->nombre_ciudad,
-                    'responsable'                   => $item->responsable,
-                    'asesor'                        => $item->asesor,
-                    'cedula_asesor'                 => $item->cedula_asesor,
-                    'iniciales'                     => $item->iniciales,
-                    'historicoEstado'               => $item->historicoEstado,
-                    'evidencia_cheque'              => $item->evidencia_cheque,
-                    'evidencia_pagare'              => $item->evidencia_pagare,
-                    'tipo_descripcion'              => $item->tipo_descripcion,
-                    'verificaciones'                => $item->verificaciones,
-                    'contadorAlcanceAbierto'        => $item->contadorAlcanceAbierto,
-                    'contadorAlcanceCerrado'        => $item->contadorAlcanceCerrado,
-                    'contadorHijosDocentesAbiertosEnviados' => $item->contadorHijosDocentesAbiertosEnviados,
-                    'contadorObsequiosAbiertosEnviados'    => $item->contadorObsequiosAbiertosEnviados,
-                    'contadorPendientesConvenio'     => $item->contadorPendientesConvenio,
-                    'contadorPendientesAnticipos'    => $item->contadorPendientesAnticipos,
-                    'periodo'                        => $item->periodo,
-                    'facturador'                     => $item->facturador,
-                    'ven_neta'                       => $item->ven_neta,
-                    'valorDescuento'                 => $item->valorDescuento,
-                    'id_grupo_finaliza'              => $item->id_grupo_finaliza,
-                    'asesor_editComision'            => $item->asesor_editComision,
-                    'convenio_origen'                => $item->convenio_origen,
-                    'pedidos_convenios_id'           => $item->pedidos_convenios_id,
-                    'permitir_editar_despues_contrato' => $item->permitir_editar_despues_contrato,
-                    'ca_codigo_agrupado'             => $item->ca_codigo_agrupado,
-                    'anticipo_global'                => $item->anticipo_global,
-                ];
-            }
-            return $response;
-        } catch (\Exception $e) {
-            return [
-                'status' => 0,
-                'message' => $e->getMessage()
+        // $clave = "get_pedidos_periodo".$periodo.$idusuario;
+        // if (Cache::has($clave)) {
+        //     $response = Cache::get($clave);
+        // } else {
+        $pedidos = [];
+        $response = [];
+        if($rol == 1)   { $pedidos = $this->getPedido(5,$periodo); }
+        if($rol == 23)  { $pedidos = $this->getPedido(1,$periodo); }
+        if($rol == 11)  { $pedidos = $this->getPedido(2,$periodo,$idusuario); }
+        if(count($pedidos)==0){
+            return $pedidos;
+        }
+        foreach($pedidos as $key => $item){
+            $response[$key] = [
+                'id_pedido'                     => $item->id_pedido,
+                'id_asesor'                     => $item->id_asesor,
+                'id_periodo'                    => $item->id_periodo,
+                'tipo_venta'                    => $item->tipo_venta,
+                'tipo_venta_descr'              => $item->tipo_venta_descr,
+                'estado'                        => $item->estado,
+                'id_institucion'                => $item->id_institucion,
+                'descuento'                     => $item->descuento,
+                'anticipo'                      => $item->anticipo,
+                'ifanticipo'                    => $item->ifanticipo,
+                'anticipo_aprobado'             => $item->anticipo_aprobado,
+                'ifagregado_anticipo_aprobado'  => $item->ifagregado_anticipo_aprobado,
+                'deuda'                         => $item->deuda,
+                'convenio_anios'                => $item->convenio_anios,
+                'id_responsable'                => $item->id_responsable,
+                'total_unidades'                => $item->total_unidades,
+                'contrato_generado'             => $item->contrato_generado,
+                'observacion'                   => $item->observacion,
+                'imagen'                        => $item->imagen,
+                'convenio_anios'                => $item->convenio_anios,
+                'facturacion_vee'               => $item->facturacion_vee,
+                'estado_verificacion'           => $item->estado_verificacion,
+                'notificados'                   => $item->notificados,
+                'totalPendienteLiquidar'        => $item->totalPendienteLiquidar,
+                'totalValorComision'            => $item->totalValorComision,
+                'totalPagado'                   => $item->totalPagado,
+                'TotalVentaReal'                => $item->TotalVentaReal,
+                'totalDeudaProxima'             => $item->totalDeudaProxima,
+                'solicitud_gerencia_estado'     => $item->solicitud_gerencia_estado,
+                'updated_at'                    => $item->updated_at,
+                'estado_librosObsequios'        => $item->estado_librosObsequios,
+                'deuda_anterior_estado'         => $item->deuda_anterior_estado,
+                'nombreInstitucion'             => $item->nombreInstitucion,
+                'nombre_ciudad'                 => $item->nombre_ciudad,
+                'responsable'                   => $item->responsable,
+                'asesor'                        => $item->asesor,
+                'cedula_asesor'                 => $item->cedula_asesor,
+                'iniciales'                     => $item->iniciales,
+                'historicoEstado'               => $item->historicoEstado,
+                'evidencia_cheque'              => $item->evidencia_cheque,
+                'evidencia_pagare'              => $item->evidencia_pagare,
+                'tipo_descripcion'              => $item->tipo_descripcion,
+                'verificaciones'                => $item->verificaciones,
+                'contadorAlcanceAbierto'        => $item->contadorAlcanceAbierto,
+                'contadorAlcanceCerrado'        => $item->contadorAlcanceCerrado,
+                'contadorHijosDocentesAbiertosEnviados' => $item->contadorHijosDocentesAbiertosEnviados,
+                'contadorObsequiosAbiertosEnviados'    => $item->contadorObsequiosAbiertosEnviados,
+                'contadorPendientesConvenio'     => $item->contadorPendientesConvenio,
+                'contadorPendientesAnticipos'    => $item->contadorPendientesAnticipos,
+                'periodo'                        => $item->periodo,
+                'facturador'                     => $item->facturador,
+                'ven_neta'                       => $item->ven_neta,
+                'valorDescuento'                 => $item->valorDescuento,
+                'id_grupo_finaliza'              => $item->id_grupo_finaliza,
+                'asesor_editComision'            => $item->asesor_editComision,
+                'convenio_origen'                => $item->convenio_origen,
+                'pedidos_convenios_id'           => $item->pedidos_convenios_id,
+                'permitir_editar_despues_contrato' => $item->permitir_editar_despues_contrato,
+                'ca_codigo_agrupado'             => $item->ca_codigo_agrupado,
+                'anticipo_global'                => $item->anticipo_global,
             ];
         }
+        return $response;
+        //     Cache::put($clave,$response);
+        // }
+        // return $response;
     }
     public function get_pedidos_periodo_facturador($periodo,$id_facturador){
         // $clave = "get_pedidos_periodo_facturador".$periodo.$id_facturador;
