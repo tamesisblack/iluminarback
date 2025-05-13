@@ -88,6 +88,7 @@ class PedidosController extends Controller
     //api:get/pedidos
     public function index(Request $request)
     {
+        return "hola mundo";
         if($request->homeAdmin){
             return $this->homeAdmin();
         }
