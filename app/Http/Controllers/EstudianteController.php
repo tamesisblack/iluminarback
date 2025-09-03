@@ -29,6 +29,7 @@ class EstudianteController extends Controller
     public function estudianteMetodosGet(Request $request){
         if($request->getMateriasAsignadas){ return $this->getMateriasAsignadas($request->idusuario); }
         if($request->getTareasEstudiante) { return $this->getTareasEstudiante($request->idusuario); }
+        if($request->getCursosXPeriodoArchivos) { return $this->getCursosXPeriodoArchivos($request); }
     }
     //api:get/estudianteMetodosGet?getMateriasAsignadas=1&idusuario=1
     public function getMateriasAsignadas($idusuario){
@@ -102,6 +103,101 @@ class EstudianteController extends Controller
         ];
         return $datos;
     }
+    //api:get/estudianteMetodosGet?getCursosXPeriodoArchivos=1&idperiodo=20&page=1&per_page=50
+    public function getCursosXPeriodoArchivos(Request $request){
+        $idperiodo = $request->idperiodo;
+        $page = $request->input('page', 1);
+        $perPage = $request->input('per_page', 200);
+        $offset = ($page - 1) * $perPage;
+
+        $cursos = DB::SELECT("
+            SELECT
+                t.id, t.url, t.tarea_idtarea, t.curso_idcurso,
+                t.fecha as fecha_tarea,
+                c.nombre,
+                c.codigo,
+                a.nombreasignatura,
+                c.id_asignatura,
+                c.fecha_quitado_archivos,
+                he.fechaUltimaVisitaEstudiante,
+                hd.fechaUltimaVisitaDocente
+            FROM usuario_tarea t
+            LEFT JOIN curso c ON c.idcurso = t.curso_idcurso
+            LEFT JOIN asignatura a ON a.idasignatura = c.id_asignatura
+            LEFT JOIN (
+                SELECT id_curso, MAX(created_at) AS fechaUltimaVisitaEstudiante
+                FROM historico_visitas
+                WHERE recurso = '11' AND id_group = '4'
+                GROUP BY id_curso
+            ) he ON he.id_curso = t.curso_idcurso
+            LEFT JOIN (
+                SELECT id_curso, MAX(created_at) AS fechaUltimaVisitaDocente
+                FROM historico_visitas
+                WHERE recurso = '11' AND id_group = '6'
+                GROUP BY id_curso
+            ) hd ON hd.id_curso = t.curso_idcurso
+            WHERE c.id_periodo = ?
+            ORDER BY t.id DESC
+            LIMIT ? OFFSET ?
+        ", [$idperiodo, $perPage, $offset]);
+
+        $total = DB::SELECT("
+            SELECT COUNT(*) as total
+            FROM usuario_tarea t
+            LEFT JOIN curso c ON c.idcurso = t.curso_idcurso
+            WHERE c.id_periodo = ?
+        ", [$idperiodo])[0]->total;
+
+        $resultado = [];
+        foreach ($cursos as $item) {
+            $cursoKey = $item->codigo;
+            $cursoEncontrado = false;
+            $nombreAsignatura = ($item->id_asignatura == 0 || $item->id_asignatura === null) ? 'Sin asignatura' : $item->nombreasignatura;
+            foreach ($resultado as &$curso) {
+                if ($curso['codigo'] === $cursoKey) {
+                    $cursoEncontrado = true;
+                    $curso['archivos'][] = [
+                        'id' => $item->id,
+                        'url' => $item->url,
+                        'tarea_idtarea' => $item->tarea_idtarea,
+                        'fecha_tarea' => $item->fecha_tarea,
+                    ];
+                    break;
+                }
+            }
+            unset($curso);
+            if (!$cursoEncontrado) {
+                $resultado[] = [
+                    'nombre' => $item->nombre,
+                    'codigo' => $item->codigo,
+                    'id_asignatura' => $item->id_asignatura,
+                    'nombreasignatura' => $nombreAsignatura,
+                    'fecha_quitado_archivos' => $item->fecha_quitado_archivos,
+                    'curso_idcurso' => $item->curso_idcurso,
+                    'fechaUltimaVisitaEstudiante' => $item->fechaUltimaVisitaEstudiante,
+                    'fechaUltimaVisitaDocente' => $item->fechaUltimaVisitaDocente,
+                    'archivos' => [
+                        [
+                            'id' => $item->id,
+                            'url' => $item->url,
+                            'tarea_idtarea' => $item->tarea_idtarea,
+                            'fecha_tarea' => $item->fecha_tarea
+                        ]
+                    ]
+                ];
+            }
+        }
+
+        $totalPages = $perPage > 0 ? ceil($total / $perPage) : 1;
+        return [
+            'data' => $resultado,
+            'total' => $total,
+            'page' => $page,
+            'per_page' => $perPage,
+            'total_pages' => $totalPages
+        ];
+    }
+
     public function getTareasP($idCurso,$idEstudiante,$tipo){
         //tipo 0 => tareas pendientes, 1 => tareas realizadas
         $query = DB::SELECT("SELECT t.* FROM tarea t
@@ -269,7 +365,24 @@ class EstudianteController extends Controller
 
     public function tareaEstudiantePendiente(Request $request){
         $data=array();
-        $tarea = DB::SELECT("SELECT * FROM tarea left join contenido on contenido.idcontenido = tarea.contenido_idcontenido WHERE tarea.curso_idcurso = ? AND tarea.estado = '1' AND tarea.usuario_idusuario IS NULL OR tarea.usuario_idusuario = ?",[$request->idcurso,$request->idusuario]);
+        // $tarea = DB::SELECT("SELECT * FROM tarea
+        // left join contenido on contenido.idcontenido = tarea.contenido_idcontenido
+        // WHERE tarea.curso_idcurso = '$request->idcurso'
+        // AND tarea.estado = '1'
+        // AND tarea.usuario_idusuario IS NULL OR tarea.usuario_idusuario = '$request->idusuario'
+        // ");
+        $tarea = DB::select("
+            SELECT tarea.*
+            FROM tarea
+            LEFT JOIN contenido ON contenido.idcontenido = tarea.contenido_idcontenido
+            WHERE tarea.curso_idcurso = ?
+            AND tarea.estado = '1'
+            AND (
+                    tarea.usuario_idusuario IS NULL
+                    OR tarea.usuario_idusuario = ?
+                )
+        ", [$request->idcurso, $request->idusuario]);
+
         foreach ($tarea as $key => $post) {
             $verifica = DB::SELECT("SELECT * FROM usuario_tarea WHERE tarea_idtarea = ? AND usuario_idusuario = ?",[$post->idtarea,$request->idusuario]);
             if(!empty($verifica)){
@@ -907,6 +1020,10 @@ class EstudianteController extends Controller
             "registroProblemas"     => $registroProblemas,
             "cambiados"             => $contador,
         ];
+    }
+    //API:POST/estudianteMetodosPost
+    public function estudianteMetodosPost(Request $request){
+
     }
 }
 

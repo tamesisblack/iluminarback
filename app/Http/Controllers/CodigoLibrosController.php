@@ -99,10 +99,12 @@ class CodigoLibrosController extends Controller
                 $ifbc_periodo       = $validar[0]->bc_periodo;
                 //validar si tiene codigo de union
                 $codigo_union       = $validar[0]->codigo_union;
+                // validar codigo liquidado regalado
+                $ifLiquidadoRegalado = $validar[0]->liquidado_regalado;
                 $preValidate         = false;
                 //VALIDACION
-                if($id_group == 11) { $preValidate = (($ifid_periodo  == $traerPeriodo || $ifid_periodo == 0 ||  $ifid_periodo == null  ||  $ifid_periodo == "") && ($ifBc_Institucion  == $institucion || $ifBc_Institucion == 0) && ($ifbc_periodo  == $traerPeriodo || $ifbc_periodo == 0) && ($ifventa_estado != 0) && $ifLeido == '1' && $ifLiquidado == '1' && $ifBloqueado !=2); }
-                else{                 $preValidate = (($ifid_periodo  == $traerPeriodo || $ifid_periodo == 0 ||  $ifid_periodo == null  ||  $ifid_periodo == "") && ($ifBc_Institucion  == $institucion || $ifBc_Institucion == 0) && ($ifbc_periodo  == $traerPeriodo || $ifbc_periodo == 0) && ($ifventa_estado == 0 || $ifventa_estado == $venta_estado) && $ifLeido == '1' && $ifLiquidado == '1' && $ifBloqueado !=2); }
+                if($id_group == 11) { $preValidate = (($ifid_periodo  == $traerPeriodo || $ifid_periodo == 0 ||  $ifid_periodo == null  ||  $ifid_periodo == "") && ($ifBc_Institucion  == $institucion || $ifBc_Institucion == 0) && ($ifbc_periodo  == $traerPeriodo || $ifbc_periodo == 0) && ($ifventa_estado != 0) && $ifLeido == '1' && ($ifLiquidado == '1' || $ifLiquidado == '2' ) && $ifBloqueado !=2 && $ifLiquidadoRegalado == 0); }
+                else{                 $preValidate = (($ifid_periodo  == $traerPeriodo || $ifid_periodo == 0 ||  $ifid_periodo == null  ||  $ifid_periodo == "") && ($ifBc_Institucion  == $institucion || $ifBc_Institucion == 0) && ($ifbc_periodo  == $traerPeriodo || $ifbc_periodo == 0) && ($ifventa_estado == 0 || $ifventa_estado == $venta_estado) && $ifLeido == '1' && ($ifLiquidado == '1' || $ifLiquidado == '2' ) && $ifBloqueado !=2 && $ifLiquidadoRegalado == 0); }
                 //===PROCESO===========
                 if($preValidate){
                     //VALIDAR CODIGOS QUE NO TENGA CODIGO UNION
@@ -216,8 +218,8 @@ class CodigoLibrosController extends Controller
             $ifbc_periodo       = $objectCodigoUnion[0]->bc_periodo;
             $preValidate        = false;
             //VALIDACIO N
-            if($id_group == 11) { $preValidate = (($ifid_periodo  == $traerPeriodo || $ifid_periodo == 0 ||  $ifid_periodo == null  ||  $ifid_periodo == "") && ($ifBc_Institucion  == $institucion || $ifBc_Institucion == 0) && ($ifbc_periodo  == $traerPeriodo || $ifbc_periodo == 0) && ($ifventa_estado != 0) && $ifLeido == '1' && $ifLiquidado == '1' && $ifBloqueado !=2); }
-            else{                 $preValidate = (($ifid_periodo  == $traerPeriodo || $ifid_periodo == 0 ||  $ifid_periodo == null  ||  $ifid_periodo == "") && ($ifBc_Institucion  == $institucion || $ifBc_Institucion == 0) && ($ifbc_periodo  == $traerPeriodo || $ifbc_periodo == 0) && ($ifventa_estado == 0 || $ifventa_estado == $venta_estado) && $ifLeido == '1' && $ifLiquidado == '1' && $ifBloqueado !=2); }
+            if($id_group == 11) { $preValidate = (($ifid_periodo  == $traerPeriodo || $ifid_periodo == 0 ||  $ifid_periodo == null  ||  $ifid_periodo == "") && ($ifBc_Institucion  == $institucion || $ifBc_Institucion == 0) && ($ifbc_periodo  == $traerPeriodo || $ifbc_periodo == 0) && ($ifventa_estado != 0) && $ifLeido == '1' && ($ifLiquidado == '1' || $ifLiquidado == '2') && $ifBloqueado !=2); }
+            else{                 $preValidate = (($ifid_periodo  == $traerPeriodo || $ifid_periodo == 0 ||  $ifid_periodo == null  ||  $ifid_periodo == "") && ($ifBc_Institucion  == $institucion || $ifBc_Institucion == 0) && ($ifbc_periodo  == $traerPeriodo || $ifbc_periodo == 0) && ($ifventa_estado == 0 || $ifventa_estado == $venta_estado) && $ifLeido == '1' &&  ($ifLiquidado == '1' || $ifLiquidado == '2')  && $ifBloqueado !=2); }
             //===PROCESO===========
             if($preValidate){
                 $unionCorrecto = true;
@@ -228,7 +230,7 @@ class CodigoLibrosController extends Controller
                 ->where('codigo', '=', $codigo_union)
                 ->where('bc_estado', '1')
                 ->where('estado','<>', '2')
-                ->where('estado_liquidacion','=', '1')
+                // ->where('estado_liquidacion','=', '1')
                 ->update($arraySave);
                 //si el codigo de union se actualiza actualizo el codigo
                 if($codigoU){
@@ -237,7 +239,7 @@ class CodigoLibrosController extends Controller
                     ->where('codigo', '=', $codigo)
                     ->where('bc_estado', '1')
                     ->where('estado','<>', '2')
-                    ->where('estado_liquidacion','=', '1')
+                    // ->where('estado_liquidacion','=', '1')
                     ->update($arraySave);
                 }
             }else{
@@ -3825,6 +3827,8 @@ private function agruparPorCodigoPrimerValor($arrayOldValues) {
         if($request->getReporteLibrosXAsesor)                   { return $this->getReporteLibrosXAsesor($request); }
         if($request->getCodigosIndividuales)                    { return $this->getCodigosIndividuales($request); }
         if($request->getReporteXTipoVenta)                      { return $this->getReporteXTipoVenta($request); }
+        if($request->getReporteCombosDespachados)               { return $this->getReporteCombosDespachados($request); }
+        if($request->getReporteCombosDespachadosXCombo)         { return $this->getReporteCombosDespachadosXCombo($request); }
     }
     //api:get/metodosGetCodigos?reporteBodega=1&periodo=25
     public function reporteBodega($request){
@@ -3838,6 +3842,7 @@ private function agruparPorCodigoPrimerValor($arrayOldValues) {
         $ventaDirecta       = $request->input('ventaDirecta');
         $onlyCombos         = $request->input('onlyCombos');
         if($onlyCombos == 1){
+            //api:get/metodosGetCodigos?reporteBodega=1&periodo=27&onlyCombos=1
             return $this->codigosRepository->reporteCombos($periodo);
         }
         // Realizar la consulta
@@ -4318,7 +4323,6 @@ private function agruparPorCodigoPrimerValor($arrayOldValues) {
         return $codigosLibros;
     }
 
-
     public function getReporteXTipoVenta($request)
     {
         $periodo            = $request->periodo;
@@ -4426,10 +4430,109 @@ private function agruparPorCodigoPrimerValor($arrayOldValues) {
         // Paso 4: Devolver los resultados agrupados y sumados
         return $instituciones->values()->toArray();
     }
+
+    //api:get/metodosGetCodigos?getReporteCombosDespachados=1&periodo=27
+    public function getReporteCombosDespachados($request){
+        $periodo = $request->periodo;
+        $combos  = $this->codigosRepository->reporteCombos($periodo);
+
+        $codigosDespachos = DB::SELECT("
+            SELECT codigo, codigo_combo, combo
+            FROM codigoslibros c
+            WHERE c.bc_periodo = ?
+            AND c.prueba_diagnostica = '0'
+            AND c.estado_liquidacion IN ('0','1','2')
+            AND c.codigo_combo IS NOT NULL
+            AND c.combo IS NOT NULL
+        ", [$periodo]);
+
+        $result = [];
+
+        foreach ($combos as $combo) {
+            $agrupado = collect($codigosDespachos)
+                ->where('combo', $combo->codigo)
+                ->groupBy('combo')
+                ->map(function ($items) {
+                    $etiquetas = collect($items)
+                        ->groupBy('codigo_combo')
+                        ->map(function ($etqs, $codigo_combo) {
+                            return [
+                                'codigo_combo' => $codigo_combo,
+                                'cantidad' => count($etqs)
+                            ];
+                        })->values();
+                    return ['etiquetas' => $etiquetas];
+                })->first();
+
+            $comboArr = (array)$combo;
+            $comboArr['agrupado'] = $agrupado ? $agrupado['etiquetas'] : [];
+            $result[] = $comboArr;
+        }
+
+        $result = collect($result)
+            ->map(function($item) {
+                $error = false;
+                foreach ($item['agrupado'] as $combo) {
+                    if ($combo['cantidad'] != $item['codigosPorCombo']) {
+                        $error = true;
+                        break;
+                    }
+                }
+                $item['ifErrorCombo'] = $error ? 1 : 0;
+                return $item;
+            })
+            ->groupBy('nombrelibro')
+            ->sortKeys()
+            ->flatten(1)
+            ->values()
+            ->toArray();
+
+        return $result;
+    }
+
+
+    //api:get/metodosGetCodigos?getReporteCombosDespachadosXCombo=1&periodo=27&combo=CCMDH1
+    public function getReporteCombosDespachadosXCombo($request){
+        $periodo = $request->periodo;
+        $combo   = $request->combo;
+        if (empty($periodo) || empty($combo)) {
+            return [
+                'status' => 0,
+                'message' => 'Debe enviar periodo y combo.'
+            ];
+        }
+        $codigosDespachos = DB::SELECT("SELECT codigo,
+            codigo_combo, combo, contrato
+            FROM codigoslibros c
+            WHERE c.bc_periodo ='$periodo'
+            AND c.prueba_diagnostica = '0'
+            AND c.estado_liquidacion IN ('0','1','2')
+            AND c.codigo_combo IS NOT NULL
+            AND c.combo ='$combo' ;
+        ");
+        // Agrupar por etiqueta (codigo_combo)
+        $agrupado = collect($codigosDespachos)
+            ->groupBy('codigo_combo')
+            ->map(function ($items, $codigo_combo) {
+                return [
+                    'etiqueta' => $codigo_combo,
+                    'cantidad' => count($items),
+                    'hijos' => collect($items)->map(function($item) {
+                        return [
+                            'codigo' => $item->codigo,
+                            'codigo_combo' => $item->codigo_combo,
+                            'contrato' => $item->contrato
+                        ];
+                    })->values()
+                ];
+            })->values();
+        return $agrupado;
+    }
     //api:post/metodosPostCodigos=1
     public function metodosPostCodigos(Request $request){
         if($request->getPrevisualizarCodigos)                   { return $this->getPrevisualizarCodigos($request); }
         if($request->getPrevisualizarPaquetes)                  { return $this->getPrevisualizarPaquetes($request); }
+        if($request->formatoPaqueteCodigos)                     { return $this->formatoPaqueteCodigos($request); }
         if($request->getPrevisualizarCodigosTablaSon)           { return $this->getPrevisualizarCodigosTablaSon($request); }
         if($request->getPrevisualizarPaquetesTablaSon)          { return $this->getPrevisualizarPaquetesTablaSon($request); }
         if($request->saveImportPlus)                            { return $this->saveImportPlus($request); }
@@ -4451,7 +4554,7 @@ private function agruparPorCodigoPrimerValor($arrayOldValues) {
         $codigosABuscar = array_column($codigos, 'codigo');
         // Filtrar la colección usando whereIn y hacer un LEFT JOIN
         $resultados = CodigosLibros::whereIn('codigo', $codigosABuscar)
-            // ->where('proforma_empresa', $empresa['idEmpresa'])
+            // ->where('proforma_empresa', $empresa['idEmpresa']) nombrelibro
             ->leftJoin('institucion', 'codigoslibros.bc_institucion', '=', 'institucion.idInstitucion')
             ->leftJoin('institucion as i2', 'codigoslibros.venta_lista_institucion', '=', 'i2.idInstitucion')
             ->leftJoin('periodoescolar as pe', 'codigoslibros.bc_periodo', '=', 'pe.idperiodoescolar')
@@ -4467,11 +4570,12 @@ private function agruparPorCodigoPrimerValor($arrayOldValues) {
             'codigoslibros.venta_lista_institucion','codigoslibros.libro_idlibro','codigoslibros.documento_devolucion',
             'codigoslibros.combo','codigoslibros.codigo_combo','codigoslibros.proforma_empresa','codigoslibros.codigo_proforma',
             'codigoslibros.estado_liquidacion','codigoslibros.liquidado_regalado', 'codigoslibros.venta_estado',
-            'codigoslibros.codigo_paquete','codigoslibros.permitir_devolver_nota',
+            'codigoslibros.codigo_paquete','codigoslibros.contrato','codigoslibros.permitir_devolver_nota',
             'codigoslibros.prueba_diagnostica', 'codigoslibros.plus',
-            'ls.nombre as nombrelibro',
+            // 'ls.nombre as nombrelibro',
             'codigoslibros.estado', 'institucion.nombreInstitucion as institucionDirecta','i2.nombreInstitucion as institucionPuntoVenta','pe.periodoescolar',
             'ls.year','ls.id_libro_plus',
+            DB::raw("CASE WHEN codigoslibros.plus = 1 THEN l_plus.nombre ELSE l.nombrelibro END AS nombrelibro"),
             DB::raw("CASE WHEN codigoslibros.plus = 1 THEN l_plus.codigo_liquidacion ELSE ls.codigo_liquidacion END AS codigo_liquidacion"), // Lógica para la nueva columna
             DB::raw("CASE WHEN codigoslibros.plus = 1 THEN l_plus.id_serie ELSE ls.id_serie END AS id_serie"), // Lógica para la nueva columna
             DB::raw("CASE WHEN codigoslibros.plus = 1 THEN a_plus.area_idarea ELSE a.area_idarea END AS area_idarea"), // Lógica para la nueva columna
@@ -4738,12 +4842,14 @@ private function agruparPorCodigoPrimerValor($arrayOldValues) {
             'codigoslibros.venta_lista_institucion', 'codigoslibros.libro_idlibro', 'codigoslibros.documento_devolucion',
             'codigoslibros.combo','codigoslibros.codigo_combo', 'codigoslibros.proforma_empresa', 'codigoslibros.codigo_proforma',
             'codigoslibros.estado_liquidacion', 'codigoslibros.liquidado_regalado', 'codigoslibros.venta_estado',
-            'codigoslibros.codigo_paquete', 'ls.nombre as nombrelibro',
+            'codigoslibros.codigo_paquete','codigoslibros.contrato',
+            // 'ls.nombre as nombrelibro',
             'codigoslibros.permitir_devolver_nota', 'codigoslibros.plus',
             'codigoslibros.estado', 'institucion.nombreInstitucion as institucionDirecta',
             'i2.nombreInstitucion as institucionPuntoVenta', 'pe.periodoescolar',
             'ls.year', 'ls.id_libro_plus',
             DB::raw("CASE WHEN codigoslibros.plus = 1 THEN l_plus.codigo_liquidacion ELSE ls.codigo_liquidacion END AS codigo_liquidacion"), // Lógica para la nueva columna
+            DB::raw("CASE WHEN codigoslibros.plus = 1 THEN l_plus.nombre ELSE l.nombrelibro END AS nombrelibro"),
             DB::raw("CASE WHEN codigoslibros.plus = 1 THEN l_plus.id_serie ELSE ls.id_serie END AS id_serie"), // Lógica para la nueva columna
             DB::raw("CASE WHEN codigoslibros.plus = 1 THEN a_plus.area_idarea ELSE a.area_idarea END AS area_idarea"), // Lógica para la nueva columna
             DB::raw("CASE WHEN codigoslibros.plus = 1 THEN ls.id_libro_plus ELSE codigoslibros.libro_idlibro END AS libro_idReal"), // Lógica para la nueva columna
@@ -4805,9 +4911,11 @@ private function agruparPorCodigoPrimerValor($arrayOldValues) {
             ->map(function ($items) {
                 return [
                     'codigoCombo'  => $items->first()->codigo_combo,
+                    'combo'        => $items->first()->combo,
                     'codigosHijos' => $items->map(function ($item) {
                         return [
                             'codigoActivacion'   => $item->codigo,
+                            'contrato'           => $item->contrato,
                             'codigoDiagnostico'  => $item->codigo_union,
                             'codigo_liquidacion' => $item->codigo_liquidacion
                         ];
@@ -4887,6 +4995,7 @@ private function agruparPorCodigoPrimerValor($arrayOldValues) {
             'encontrados'           => $agrupadosPorInstitucion,
         ];
     }
+
 
     //api:post/metodosPostCodigos?getPrevisualizarPaquetesTablaSon=1
     public function getPrevisualizarPaquetesTablaSon($request) {

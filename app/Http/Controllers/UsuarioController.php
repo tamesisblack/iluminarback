@@ -15,6 +15,7 @@ use App\Models\HistoricoVisitas;
 use Illuminate\Http\Request;
 use App\Quotation;
 use App\Traits\Codigos\TraitCodigosGeneral;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Mail;
 use Cookie;
@@ -229,78 +230,114 @@ class UsuarioController extends Controller
         set_time_limit(6000000);
         ini_set('max_execution_time', 6000000);
 
+
         // $idInstitucion = $request->idInstitucion;
         // $fromDate = $request->fromDate;
         // $toDate = $request->toDate;
-        // $usuarios = DB::table('usuario')
-        //     ->leftJoin('institucion_cargos', 'usuario.cargo_id', '=', 'institucion_cargos.id')
-        //     ->leftJoin('historico_visitas', function ($join) use ($fromDate, $toDate) {
-        //         $join->on('usuario.idusuario', '=', 'historico_visitas.idusuario')
-        //             ->where('historico_visitas.recurso', '=', 15)
-        //             ->whereBetween('historico_visitas.created_at', [$fromDate, $toDate]);
-        //     })
-        //     ->select('usuario.*', 'institucion_cargos.cargo', 'institucion_cargos.id as cargo_id', DB::raw('COUNT(historico_visitas.id) as visitas'))
-        //     ->where('usuario.institucion_idInstitucion', '=', $idInstitucion)
-        //     ->where('usuario.id_group', '=', 6)
-        //     ->where('usuario.estado_idEstado', '=', '1')
-        //     ->groupBy('usuario.idusuario')
-        //     ->get();
-        // return $usuarios;
+        // $periodoId = $request->periodo_id;
 
+        // $result = AsignaturaDocente::select(
+        //     'asignaturausuario.usuario_idusuario',
+        //     'asignaturausuario.periodo_id',
+        //     'usuario.nombres',
+        //     'usuario.name_usuario',
+        //     'usuario.apellidos',
+        //     'usuario.cedula',
+        //     'usuario.email',
+        //     'usuario.idusuario',
+        //     'usuario.created_at',
+        //     'usuario.updated_at',
+        //     'institucion_cargos.cargo',
+        //     'institucion_cargos.id as cargo_id'
+        // )
+        // ->distinct()
+        // ->leftJoin('usuario', 'asignaturausuario.usuario_idusuario', '=', 'usuario.idusuario')
+        // ->leftJoin('institucion_cargos', 'usuario.cargo_id', '=', 'institucion_cargos.id')
+        // ->where('usuario.id_group', '=', '6')
+        // ->where('usuario.institucion_idInstitucion', '=', $idInstitucion)
+        // ->where('asignaturausuario.periodo_id', '=', $periodoId)
+        // ->where('usuario.estado_idEstado', '=', '1')
+        // ->get() // Ejecutar la consulta y obtener los resultados
+        // ->map(function ($documento) {
+        //     return(Object) [
+        //         "usuario_idusuario" => $documento->usuario_idusuario,
+        //         "periodo_id"        => $documento->periodo_id,
+        //         "nombres"           => $documento->nombres,
+        //         "name_usuario"      => $documento->name_usuario,
+        //         "apellidos"         => $documento->apellidos,
+        //         "cedula"            => $documento->cedula,
+        //         "email"             => $documento->email,
+        //         "idusuario"         => $documento->idusuario,
+        //         'created_at'        => $documento->created_at->format('Y-m-d H:i:s'), // Formatea la fecha
+        //         'updated_at'        => $documento->updated_at->format('Y-m-d H:i:s'), // Formatea la fecha
+        //         "cargo"             => $documento->cargo,
+        //         "cargo_id"          => $documento->cargo_id,
+        //     ];
+        // });
+
+        // $result->map(function($item) use ($fromDate, $toDate) {
+        //     $item->visitas = HistoricoVisitas::where('idusuario', $item->usuario_idusuario)
+        //         ->where('recurso', 15)
+        //         // ->where('periodo_id', $item->periodo_id)
+        //         ->whereBetween('historico_visitas.created_at', [$fromDate, $toDate])
+        //         ->count();
+        //     return $item;
+        // });
+
+        // // Devuelve el resultado modificado
+        // return $result;
         $idInstitucion = $request->idInstitucion;
-        $fromDate = $request->fromDate;
-        $toDate = $request->toDate;
+        $fromDate = Carbon::parse($request->fromDate)->startOfDay();
+        $toDate   = Carbon::parse($request->toDate)->endOfDay();
         $periodoId = $request->periodo_id;
 
         $result = AsignaturaDocente::select(
-            'asignaturausuario.usuario_idusuario',
-            'asignaturausuario.periodo_id',
-            'usuario.nombres',
-            'usuario.name_usuario',
-            'usuario.apellidos',
-            'usuario.cedula',
-            'usuario.email',
-            'usuario.idusuario',
-            'usuario.created_at',
-            'usuario.updated_at',
-            'institucion_cargos.cargo',
-            'institucion_cargos.id as cargo_id'
-        )
-        ->distinct()
-        ->leftJoin('usuario', 'asignaturausuario.usuario_idusuario', '=', 'usuario.idusuario')
-        ->leftJoin('institucion_cargos', 'usuario.cargo_id', '=', 'institucion_cargos.id')
-        ->where('usuario.id_group', '=', '6')
-        ->where('usuario.institucion_idInstitucion', '=', $idInstitucion)
-        ->where('asignaturausuario.periodo_id', '=', $periodoId)
-        ->where('usuario.estado_idEstado', '=', '1')
-        ->get() // Ejecutar la consulta y obtener los resultados
-        ->map(function ($documento) {
-            return(Object) [
-                "usuario_idusuario" => $documento->usuario_idusuario,
-                "periodo_id"        => $documento->periodo_id,
-                "nombres"           => $documento->nombres,
-                "name_usuario"      => $documento->name_usuario,
-                "apellidos"         => $documento->apellidos,
-                "cedula"            => $documento->cedula,
-                "email"             => $documento->email,
-                "idusuario"         => $documento->idusuario,
-                'created_at'        => $documento->created_at->format('Y-m-d H:i:s'), // Formatea la fecha
-                'updated_at'        => $documento->updated_at->format('Y-m-d H:i:s'), // Formatea la fecha
-                "cargo"             => $documento->cargo,
-                "cargo_id"          => $documento->cargo_id,
-            ];
-        });
+                'asignaturausuario.usuario_idusuario',
+                'asignaturausuario.periodo_id',
+                'usuario.nombres',
+                'usuario.name_usuario',
+                'usuario.apellidos',
+                'usuario.cedula',
+                'usuario.email',
+                'usuario.idusuario',
+                'usuario.created_at',
+                'usuario.updated_at',
+                'institucion_cargos.cargo',
+                'institucion_cargos.id as cargo_id'
+            )
+            ->distinct()
+            ->leftJoin('usuario', 'asignaturausuario.usuario_idusuario', '=', 'usuario.idusuario')
+            ->leftJoin('institucion_cargos', 'usuario.cargo_id', '=', 'institucion_cargos.id')
+            ->where('usuario.id_group', '=', '6')
+            ->where('usuario.institucion_idInstitucion', '=', $idInstitucion)
+            ->where('asignaturausuario.periodo_id', '=', $periodoId)
+            ->where('usuario.estado_idEstado', '=', '1')
+            ->get()
+            ->map(function ($documento) {
+                return (Object) [
+                    "usuario_idusuario" => $documento->usuario_idusuario,
+                    "periodo_id"        => $documento->periodo_id,
+                    "nombres"           => $documento->nombres,
+                    "name_usuario"      => $documento->name_usuario,
+                    "apellidos"         => $documento->apellidos,
+                    "cedula"            => $documento->cedula,
+                    "email"             => $documento->email,
+                    "idusuario"         => $documento->idusuario,
+                    'created_at'        => $documento->created_at->format('Y-m-d H:i:s'),
+                    'updated_at'        => $documento->updated_at->format('Y-m-d H:i:s'),
+                    "cargo"             => $documento->cargo,
+                    "cargo_id"          => $documento->cargo_id,
+                ];
+            });
 
-        $result->map(function($item) use ($fromDate, $toDate) {
+        $result->map(function ($item) use ($fromDate, $toDate) {
             $item->visitas = HistoricoVisitas::where('idusuario', $item->usuario_idusuario)
                 ->where('recurso', 15)
-                ->where('periodo_id', $item->periodo_id)
+                // ->where('periodo_id', $item->periodo_id)
                 ->whereBetween('historico_visitas.created_at', [$fromDate, $toDate])
                 ->count();
             return $item;
         });
-
-        // Devuelve el resultado modificado
         return $result;
     }
     public function usuarioVisitas(Request $request){
@@ -323,30 +360,108 @@ class UsuarioController extends Controller
     public function usuarioVisitasAll(Request $request){
         set_time_limit(6000000);
         ini_set('max_execution_time', 6000000);
+        $id_group = $request->id_group;
         $usuarios = DB::SELECT("SELECT u.idusuario ,CONCAT(u.nombres,' ', u.apellidos) as usuario, u.cedula,u.email,
             u.cedula
             FROM usuario u
             WHERE u.institucion_idInstitucion = '$request->institucion_id'
             AND u.estado_idEstado = '1'
-            AND u.id_group = '6'
+            AND u.id_group = '$id_group'
         ");
         $datos = [];
         foreach($usuarios as $key => $item){
-            $visitas = DB::SELECT("SELECT id,h.recurso FROM historico_visitas h
-            where h.idusuario = '$item->idusuario'
-            AND h.created_at  BETWEEN '$request->fromDate' AND '$request->toDate'
+            // $visitas = DB::SELECT("SELECT id,h.recurso FROM historico_visitas h
+            // where h.idusuario = '$item->idusuario'
+            // AND h.created_at  BETWEEN '$request->fromDate' AND '$request->toDate'
+            // ");
+            // $datos[] = [
+            //     "idusuario"     => $item->idusuario,
+            //     "usuario"       => $item->usuario,
+            //     "cedula"        => $item->cedula,
+            //     "email"         => $item->email,
+            //     "visitas"       => $visitas
+            // ];
+            $from = $request->fromDate;
+            $to   = Carbon::parse($request->toDate)->addDay()->toDateString(); // le sumamos 1 día
+
+            $visitas = DB::select("
+                SELECT id, h.recurso
+                FROM historico_visitas h
+                WHERE h.idusuario = '$item->idusuario'
+                AND h.created_at BETWEEN '$from' AND '$to'
             ");
+
+            $datos[] = [
+                "idusuario" => $item->idusuario,
+                "usuario"   => $item->usuario,
+                "cedula"    => $item->cedula,
+                "email"     => $item->email,
+                "visitas"   => $visitas
+            ];
+        }
+        // Ordenar: primero los que tienen visitas, luego los que no tienen visitas
+        usort($datos, function($a, $b) {
+            $aHasVisitas = !empty($a['visitas']);
+            $bHasVisitas = !empty($b['visitas']);
+            if ($aHasVisitas == $bHasVisitas) return 0;
+            return $aHasVisitas ? -1 : 1;
+        });
+        return $datos;
+    }
+    //api:get/usuarioVisitasXUsuarioRecurso?idusuario=62129&institucion_id=1167&recurso=16&fromDate=2025-08-01&toDate=2025-08-31
+    public function usuarioVisitasXUsuarioRecurso(Request $request){
+        set_time_limit(6000000);
+        ini_set('max_execution_time', 6000000);
+        $idusuario      = $request->idusuario;
+        $institucion_id = $request->institucion_id;
+        $recurso        = $request->recurso;
+        $fromDate       = $request->fromDate;
+        $toDate         = $request->toDate;
+
+        $usuarios = DB::SELECT("SELECT u.idusuario ,CONCAT(u.nombres,' ', u.apellidos) as usuario, u.cedula,u.email,
+            u.cedula
+            FROM usuario u
+            WHERE u.institucion_idInstitucion = '$institucion_id'
+            AND u.estado_idEstado = '1'
+            AND u.idusuario = '$idusuario'
+        ");
+        $datos = [];
+        foreach($usuarios as $key => $item){
+            // $visitas = DB::SELECT("SELECT id,h.recurso, nombreasignatura, created_at
+            // FROM historico_visitas h
+            // where h.idusuario = '$item->idusuario'
+            // AND h.recurso = '$recurso'
+            // AND h.created_at  BETWEEN '$fromDate' AND '$toDate'
+            // ORDER BY h.id DESC
+            // ");
+            // $datos[$key] = [
+            //     "idusuario"     => $item->idusuario,
+            //     "usuario"       => $item->usuario,
+            //     "cedula"        => $item->cedula,
+            //     "email"         => $item->email,
+            //     "visitas"       => $visitas,
+            // ];
+            $fromDate = Carbon::parse($request->fromDate)->startOfDay();
+            $toDate   = Carbon::parse($request->toDate)->endOfDay();
+
+            $visitas = DB::table('historico_visitas as h')
+                ->select('id', 'h.recurso', 'nombreasignatura', 'created_at','datos')
+                ->where('h.idusuario', $item->idusuario)
+                ->where('h.recurso', $recurso)
+                ->whereBetween('h.created_at', [$fromDate, $toDate])
+                ->orderByDesc('h.id')
+                ->get();
+
             $datos[$key] = [
-                "idusuario"     => $item->idusuario,
-                "usuario"       => $item->usuario,
-                "cedula"        => $item->cedula,
-                "email"         => $item->email,
-                "visitas"       => $visitas
+                "idusuario" => $item->idusuario,
+                "usuario"   => $item->usuario,
+                "cedula"    => $item->cedula,
+                "email"     => $item->email,
+                "visitas"   => $visitas,
             ];
         }
         return $datos;
     }
-
     public function datosUsuario(Request $request)
     {
         $idusuario = auth()->user()->idusuario;
@@ -1072,6 +1187,37 @@ class UsuarioController extends Controller
         WHERE di.director_id = '$request->idusuario'
         ");
         return $consulta;
+    }
+
+    public function VerificarDirectorGeneralComiles(Request $request)
+    {
+        $ids_instituciones = [1892, 1865];
+        $query = DB::table('director_has_institucion as dhi')
+            ->where('dhi.director_id', $request->idusuario)
+            ->whereIn('dhi.institucion_id', $ids_instituciones)
+            ->get();
+        if ($query->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No se encontró un usuario asignado a esas instituciones',
+                'data' => []
+            ], 200);
+        }
+        return response()->json([
+            'success' => true,
+            'message' => 'Usuario asignado correctamente',
+            'data' => $query
+        ]);
+    }
+
+    public function getTodas_FAE_NAVAL_TERESTRE_BACK() {
+        $query = DB::SELECT("SELECT ins.*, ins.idInstitucion as institucion_id
+            FROM institucion ins
+            WHERE ins.tipo_institucion = 3
+            OR ins.tipo_institucion = 4
+            OR ins.tipo_institucion = 5
+        ");
+        return $query;
     }
     //para quitar la asignacion al director la institucion
     //api::>>post/quitarAsignacion
