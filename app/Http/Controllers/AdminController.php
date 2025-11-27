@@ -34,6 +34,7 @@ use App\Models\Verificacion;
 use App\Models\Video;
 use App\Repositories\Codigos\CodigosRepository;
 use App\Repositories\Facturacion\DevolucionRepository;
+use App\Repositories\pedidos\PedidosRepository;
 use DB;
 use GraphQL\Server\RequestError;
 use Mail;
@@ -53,11 +54,13 @@ class AdminController extends Controller
     use TraitVerificacionGeneral;
     protected $devolucionRepository;
     private $codigosRepository;
-    public function __construct( DevolucionRepository  $devolucionRepository,CodigosRepository $codigosRepository)
+    protected $pedidoRepository;
+    public function __construct( DevolucionRepository  $devolucionRepository,CodigosRepository $codigosRepository, PedidosRepository $pedidoRepository)
     {
 
         $this->devolucionRepository  = $devolucionRepository;
         $this->codigosRepository     = $codigosRepository;
+        $this->pedidoRepository      = $pedidoRepository;
     }
     public function getFilesTest(){
       $query = DB::SELECT("SELECT pd.*,c.convenio_anios
@@ -279,10 +282,12 @@ class AdminController extends Controller
     //     }
     // }
 
+    //api:get pruebatest?periodo_idUno=25&periodo_idDos=25&codigoC=S24&codigoC2=S24&ifRegalados=0
     public function pruebaApi(Request $request){
         try {
             set_time_limit(6000000);
             ini_set('max_execution_time', 6000000);
+
 
             $datos = [];
 
@@ -291,6 +296,7 @@ class AdminController extends Controller
             $periodo2 = $request->periodo_idDos;
             $codigosContrato = $request->codigoC;
             $codigoContratoComparar = $request->codigoC2;
+            $ifRegalados = $request->input('ifRegalados','1'); //0 = No traer regalados, 1 = traer regalados
 
             // Validación de parámetros
             if ($codigosContrato == null || $codigoContratoComparar == null) {
@@ -360,6 +366,54 @@ class AdminController extends Controller
                     "ContratosDespues" => $contratosDespues,
                     "ContratosAnterior" => $JsonAntes,
                 ];
+            } // fin foreach
+            if($ifRegalados == '0'){
+                // return $datos; // Retornar datos sin regalados
+                // if ($periodo != $periodo2) {
+                // // periodo anterior
+                // $getAsesoresPedidos = $this->pedidoRepository->ReportePedidoGeneral($periodo,1);
+                // // periodo despues
+                // $getAsesoresPedidos2 = $this->pedidoRepository->ReportePedidoGeneral($periodo2,1);
+                // } else {
+                // $getAsesoresPedidos = $this->pedidoRepository->ReportePedidoGeneral($periodo2,1);
+                // $getAsesoresPedidos2 = $getAsesoresPedidos;
+                // }
+              if ($periodo != $periodo2) {
+                    // periodo anterior
+                    $getAsesoresPedidos = $this->pedidoRepository->ReportePedidoGeneral($periodo, 1);
+                    // periodo después
+                    $getAsesoresPedidos2 = $this->pedidoRepository->ReportePedidoGeneral($periodo2, 1);
+                } else {
+                    $getAsesoresPedidos = $this->pedidoRepository->ReportePedidoGeneral($periodo2, 1);
+                    $getAsesoresPedidos2 = $getAsesoresPedidos;
+                }
+                // agregar datosVentaAnterior y datosVentaDespues filtrados por id_asesor
+                $datos = collect($datos)->map(function ($item) use ($getAsesoresPedidos, $getAsesoresPedidos2) {
+                    $idAsesor = is_array($item) ? $item['id_asesor'] : $item->id_asesor;
+
+                    // filtramos por id_asesor en cada periodo
+                    $datosVentaAnterior = collect($getAsesoresPedidos)->where('id_asesor', $idAsesor)->values();
+                    $datosVentaDespues  = collect($getAsesoresPedidos2)->where('id_asesor', $idAsesor)->values();
+
+                    // añadimos las nuevas propiedades al item original
+                    if (is_array($item)) {
+                        $item['datosVentaAnterior'] = $datosVentaAnterior;
+                        $item['datosVentaDespues']  = $datosVentaDespues;
+                    } else {
+                        $item->datosVentaAnterior = $datosVentaAnterior;
+                        $item->datosVentaDespues  = $datosVentaDespues;
+                    }
+
+                    return $item;
+                })->toArray();
+
+                return $datos;
+
+
+                // foreach($datos as $key => $item){
+
+                // }
+                return $datos; // Retornar datos sin regalados
             }
 
             // Definir los regalados
@@ -552,10 +606,9 @@ class AdminController extends Controller
     }
 
 
-     public function getContratos($id_asesor,$iniciales,$periodo,$codigoContrato=null){
-        return $this->getContratosAsesorProlipa($id_asesor,$periodo);
-        // if($periodo > 21){  return $this->getContratosAsesorProlipa($id_asesor,$periodo); }
-        // else             {  return $this->getContratosFueraProlipa($iniciales,$codigoContrato); }
+    public function getContratos($id_asesor,$iniciales,$periodo,$codigoContrato=null){
+        if($periodo > 21){  return $this->getContratosAsesorProlipa($id_asesor,$periodo); }
+        else             {  return $this->getContratosFueraProlipa($iniciales,$codigoContrato); }
     }
     public function getContratosAsesorProlipa($id_asesor,$periodo){
         $query = DB::SELECT("SELECT p.TotalVentaReal as VEN_VALOR, pe.codigo_contrato as PERIODO,
@@ -812,116 +865,139 @@ class AdminController extends Controller
         return $result;
     }
     public function pruebaData(Request $request){
-        return "hola mundo";
-        $getCodigos = 'SMCLL3-CFZCY9WFCC,
-        PSMCLL3-8E7RBKE7Y7,
-        SMCLL3-N9TKFGNVT2,
-        PSMCLL3-99KD9EWVD5,
-        SMCM3-HC2E4KCV9Z,
-        PSMCM3-YDAV4898MG,
-        SMCM3-TZRZ8CPKXW,
-        PSMCM3-8P2XNPBHGF,
-        SMCH3-4YZCDREM4A,
-        PSMCH3-SX7YU6CHAK,
-        SMCH3-9YBRZPPFRV,
-        PSMCH3-5FHKADR6HD,
-        SMCB3-YT535X2C36,
-        PSMCB3-97ETA4K26B,
-        SMCB3-CW829B4S4K,
-        PSMCB3-ESBSM2FS95
-        ';
-        $lineas = explode(",", $getCodigos); // Separar por coma
-        // Recorrer y armar el array
-        foreach ($lineas as $linea) {
-            $codigoLimpio = trim($linea); // Limpiar espacios o saltos de línea
-            if (!empty($codigoLimpio)) {
-                $codigos[] = ['codigo' => $codigoLimpio];
-            }
+        $query = DB::SELECT("SELECT st.combo AS comboTest, s.combo , s.id, s.temporal
+            FROM codigoslibros_devolucion_desarmados_son s
+            INNER JOIN codigoslibros_devolucion_desarmados_son_test st ON st.id = s.id
+            WHERE s.temporal = 0
+            AND s.combo IS NOT NULL
+
+        ");
+        $contador = 0;
+        $arrayNoGuardados = [];
+        foreach($query as $key => $item){
+            $comboTest              = $item->comboTest;
+                DB::table('codigoslibros_devolucion_desarmados_son')
+                ->where('id', $item->id)
+                ->update([
+                    'combo'      => $comboTest,
+                    'temporal'   => '1'
+                ]);
+                $contador++;
+
         }
-        // Los combos que quieres añadir, excluyendo el combo 'CMB-5YZAW6'
-        $combos = [
-            'CMB-444UPF',
-            'CMB-FCV984',
+        return [
+            "guardados"         => $contador,
+            "no_guardados"      => $arrayNoGuardados
         ];
-        $libro = 'CFAC3';
-        $getLibrosCombo = _14Producto::findOrFail($libro);
-        if(!$getLibrosCombo){
-            return ["status" => "0", "message" => "No se encontro el libro $libro"];
-        }
-        $prefixes       = explode(',', $getLibrosCombo->codigos_combos);
-        // Los prefijos (tipos de códigos) que quieres procesar
-        // $prefixes = $request->input('prefixes', ['SEAE2', 'CERP', 'CAMM', 'CUNA']);
-        // Definir la cantidad de códigos por combo
-        $cantidadPorCombo = 8;
+        // $getCodigos = 'SMCLL3-CFZCY9WFCC,
+        // PSMCLL3-8E7RBKE7Y7,
+        // SMCLL3-N9TKFGNVT2,
+        // PSMCLL3-99KD9EWVD5,
+        // SMCM3-HC2E4KCV9Z,
+        // PSMCM3-YDAV4898MG,
+        // SMCM3-TZRZ8CPKXW,
+        // PSMCM3-8P2XNPBHGF,
+        // SMCH3-4YZCDREM4A,
+        // PSMCH3-SX7YU6CHAK,
+        // SMCH3-9YBRZPPFRV,
+        // PSMCH3-5FHKADR6HD,
+        // SMCB3-YT535X2C36,
+        // PSMCB3-97ETA4K26B,
+        // SMCB3-CW829B4S4K,
+        // PSMCB3-ESBSM2FS95
+        // ';
+        // $lineas = explode(",", $getCodigos); // Separar por coma
+        // // Recorrer y armar el array
+        // foreach ($lineas as $linea) {
+        //     $codigoLimpio = trim($linea); // Limpiar espacios o saltos de línea
+        //     if (!empty($codigoLimpio)) {
+        //         $codigos[] = ['codigo' => $codigoLimpio];
+        //     }
+        // }
+        // // Los combos que quieres añadir, excluyendo el combo 'CMB-5YZAW6'
+        // $combos = [
+        //     'CMB-444UPF',
+        //     'CMB-FCV984',
+        // ];
+        // $libro = 'CFAC3';
+        // $getLibrosCombo = _14Producto::findOrFail($libro);
+        // if(!$getLibrosCombo){
+        //     return ["status" => "0", "message" => "No se encontro el libro $libro"];
+        // }
+        // $prefixes       = explode(',', $getLibrosCombo->codigos_combos);
+        // // Los prefijos (tipos de códigos) que quieres procesar
+        // // $prefixes = $request->input('prefixes', ['SEAE2', 'CERP', 'CAMM', 'CUNA']);
+        // // Definir la cantidad de códigos por combo
+        // $cantidadPorCombo = 8;
 
 
-        // Inicializar los arrays para almacenar los resultados
-        $comboOrdenado = [];
-        $combosSinCodigos = [];
-        $codigosProblemas = [];
+        // // Inicializar los arrays para almacenar los resultados
+        // $comboOrdenado = [];
+        // $combosSinCodigos = [];
+        // $codigosProblemas = [];
 
-        // Se crea un array de colecciones para cada prefijo
-        $filteredByPrefix = [];
-        foreach ($prefixes as $prefix) {
-            $filteredByPrefix[$prefix] = collect($codigos)->filter(function ($item) use ($prefix) {
-                return strpos($item['codigo'], $prefix) !== false;
-            });
-        }
+        // // Se crea un array de colecciones para cada prefijo
+        // $filteredByPrefix = [];
+        // foreach ($prefixes as $prefix) {
+        //     $filteredByPrefix[$prefix] = collect($codigos)->filter(function ($item) use ($prefix) {
+        //         return strpos($item['codigo'], $prefix) !== false;
+        //     });
+        // }
 
-        // Alternar entre combo y códigos
-        $comboIndex = 0;
-        while ($comboIndex < count($combos)) {
-            // Verificar si hay suficientes códigos disponibles antes de agregar el combo
-            $totalDisponibles = collect($filteredByPrefix)->sum(fn($collection) => $collection->count());
+        // // Alternar entre combo y códigos
+        // $comboIndex = 0;
+        // while ($comboIndex < count($combos)) {
+        //     // Verificar si hay suficientes códigos disponibles antes de agregar el combo
+        //     $totalDisponibles = collect($filteredByPrefix)->sum(fn($collection) => $collection->count());
 
-            if ($totalDisponibles < $cantidadPorCombo) {
-                // Si no hay suficientes códigos, mover el combo a la lista de problemas y continuar
-                $combosSinCodigos[] = $combos[$comboIndex];
+        //     if ($totalDisponibles < $cantidadPorCombo) {
+        //         // Si no hay suficientes códigos, mover el combo a la lista de problemas y continuar
+        //         $combosSinCodigos[] = $combos[$comboIndex];
 
-                // Capturar los códigos que no se pudieron usar
-                foreach ($filteredByPrefix as $prefix => $collection) {
-                    if ($collection->isNotEmpty()) {
-                        $codigosProblemas = array_merge($codigosProblemas, $collection->all());
-                        $filteredByPrefix[$prefix] = collect(); // Vaciar la colección para evitar duplicados
-                    }
-                }
+        //         // Capturar los códigos que no se pudieron usar
+        //         foreach ($filteredByPrefix as $prefix => $collection) {
+        //             if ($collection->isNotEmpty()) {
+        //                 $codigosProblemas = array_merge($codigosProblemas, $collection->all());
+        //                 $filteredByPrefix[$prefix] = collect(); // Vaciar la colección para evitar duplicados
+        //             }
+        //         }
 
-                $comboIndex++;
-                continue;
-            }
+        //         $comboIndex++;
+        //         continue;
+        //     }
 
-            // Añadir un combo primero
-            $comboOrdenado[] = ['codigo' => $combos[$comboIndex]];
-            $comboIndex++;
+        //     // Añadir un combo primero
+        //     $comboOrdenado[] = ['codigo' => $combos[$comboIndex]];
+        //     $comboIndex++;
 
-            // Añadir códigos
-            $codesAdded = 0;
-            while ($codesAdded < $cantidadPorCombo) {
-                foreach ($prefixes as $prefix) {
-                    if ($filteredByPrefix[$prefix]->isNotEmpty()) {
-                        // Tomar un código de este prefijo
-                        $comboOrdenado[] = $filteredByPrefix[$prefix]->shift();
-                        $codesAdded++;
+        //     // Añadir códigos
+        //     $codesAdded = 0;
+        //     while ($codesAdded < $cantidadPorCombo) {
+        //         foreach ($prefixes as $prefix) {
+        //             if ($filteredByPrefix[$prefix]->isNotEmpty()) {
+        //                 // Tomar un código de este prefijo
+        //                 $comboOrdenado[] = $filteredByPrefix[$prefix]->shift();
+        //                 $codesAdded++;
 
-                        if ($codesAdded < $cantidadPorCombo && $filteredByPrefix[$prefix]->isNotEmpty()) {
-                            $comboOrdenado[] = $filteredByPrefix[$prefix]->shift();
-                            $codesAdded++;
-                        }
-                    }
+        //                 if ($codesAdded < $cantidadPorCombo && $filteredByPrefix[$prefix]->isNotEmpty()) {
+        //                     $comboOrdenado[] = $filteredByPrefix[$prefix]->shift();
+        //                     $codesAdded++;
+        //                 }
+        //             }
 
-                    if ($codesAdded >= $cantidadPorCombo) {
-                        break;
-                    }
-                }
-            }
-        }
+        //             if ($codesAdded >= $cantidadPorCombo) {
+        //                 break;
+        //             }
+        //         }
+        //     }
+        // }
 
-        // Retornar el array con la propiedad 'codigo', los combos con problema y los códigos con problema
-        return response()->json([
-            'combo' => $comboOrdenado,
-            'combos_sin_codigos' => $combosSinCodigos,
-            'codigos_problemas' => $codigosProblemas
-        ]);
+        // // Retornar el array con la propiedad 'codigo', los combos con problema y los códigos con problema
+        // return response()->json([
+        //     'combo' => $comboOrdenado,
+        //     'combos_sin_codigos' => $combosSinCodigos,
+        //     'codigos_problemas' => $codigosProblemas
+        // ]);
 
 
         // Retorna el array con la propiedad 'codigo'
@@ -1348,12 +1424,13 @@ class AdminController extends Controller
         return $cantidad;
     }
     public function cant_codigos(){
-        $cantidad = DB::SELECT("SELECT COUNT(*) as cantidad FROM codigoslibros WHERE idusuario > 0");
-        return $cantidad;
+        return DB::table('codigoslibros')
+             ->where('idusuario', '>', 0)
+             ->count();
     }
     public function cant_codigostotal(){
-        $cantidad = DB::SELECT("SELECT COUNT(*) as cantidad FROM codigoslibros");
-        return $cantidad;
+        // $cantidad = DB::SELECT("SELECT COUNT(*) as cantidad FROM codigoslibros");
+        return DB::table('codigoslibros')->count();
     }
     public function cant_evaluaciones(){
         $cantidad = DB::SELECT("SELECT estado, COUNT(estado) as cantidad FROM evaluaciones  GROUP BY estado");
@@ -1566,6 +1643,7 @@ class AdminController extends Controller
 
             if (!$venta) {
                 // Si no se encuentra el registro, devolver un error
+                DB::rollback();
                 return response()->json(["status" => "0", 'message' => 'Venta no encontrada'], 404);
             }
 
@@ -1576,8 +1654,25 @@ class AdminController extends Controller
             ->first();
 
             if (!$proforma) {
+                DB::rollback();
                 // Si no se encuentra la proforma, devolver un error
                 return response()->json(["status" => "0", 'message' => 'Proforma no encontrada'], 404);
+            }
+
+            // 3️⃣ Validar si existen devoluciones para este documento (venta)
+            $devoluciones = DB::table('codigoslibros_devolucion_son as s')
+                ->leftJoin('codigoslibros_devolucion_header as h', 'h.id', '=', 's.codigoslibros_devolucion_id')
+                ->where('s.documento', $request->ven_codigo)
+                ->where('s.estado', '2')
+                ->where('h.estado', '<>', '3')
+                ->get();
+
+            if ($devoluciones->count() > 0) {
+                DB::rollback();
+                return response()->json([
+                    "status" => "0",
+                    "message" => "No se puede cambiar el porcentaje porque existen devoluciones asociadas al documento."
+                ]);
             }
 
             // Actualizar el campo pro_des_por en la tabla f_proforma
@@ -1920,6 +2015,1136 @@ class AdminController extends Controller
             "nivel" => $query2
         ];
     }
+
+    /**
+     * Mostrar vista para descargar códigos despachados
+     * Route: GET /admin/despachados/vista
+     */
+    public function mostrarVistaDespachados()
+    {
+        // Obtener períodos disponibles (incluir descripcion para nombres de archivo)
+        $periodos = DB::table('periodoescolar')
+                    ->select('idperiodoescolar', 'periodoescolar', 'descripcion')
+                    ->where('pedido_facturacion', '=',1)
+                    ->orderBy('idperiodoescolar', 'desc')
+                    ->get();
+
+        return view('admin.despachados', compact('periodos'));
+    }
+
+    /**
+     * Probar el procedimiento almacenado (solo primeros 10 registros)
+     * Route: GET /admin/despachados/test/{id_periodo}
+     */
+    public function testProcedimientoDespachados($id_periodo)
+    {
+        try {
+            // Configuración extendida para evitar timeout
+            set_time_limit(600); // 10 minutos
+            ini_set('max_execution_time', 600);
+            ini_set('memory_limit', '1G');
+
+            // Verificar que el período existe
+            $periodo = DB::table('periodoescolar')
+                ->where('idperiodoescolar', $id_periodo)
+                ->first();
+
+            if (!$periodo) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => "El período $id_periodo no existe"
+                ], 404);
+            }
+
+            $startTime = microtime(true);
+
+            // Probar solo los primeros registros para evitar timeout completo
+            $pdo = DB::getPdo();
+            $stmt = $pdo->prepare("CALL sp_despachados(?)");
+            $result = $stmt->execute([$id_periodo]);
+
+            if (!$result) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Error al ejecutar sp_despachados: ' . implode(', ', $stmt->errorInfo())
+                ], 500);
+            }
+
+            $datos = [];
+            $count = 0;
+            // Solo obtener 3 registros para la prueba rápida
+            while (($row = $stmt->fetch(PDO::FETCH_ASSOC)) && $count < 3) {
+                $datos[] = $row;
+                $count++;
+            }
+
+            $tiempoTranscurrido = microtime(true) - $startTime;
+            $stmt->closeCursor();
+
+            return response()->json([
+                'status' => 1,
+                'message' => '✅ Procedimiento almacenado funcionando correctamente',
+                'periodo' => $periodo->descripcion,
+                'muestra_datos' => $datos,
+                'estructura_columnas' => !empty($datos) ? array_keys($datos[0]) : [],
+                'tiempo_respuesta_segundos' => round($tiempoTranscurrido, 2),
+                'estimacion_190k_registros' => 'Basado en HeidiSQL: ~1.30 segundos + procesamiento PHP',
+                'timestamp' => date('Y-m-d H:i:s'),
+                'siguiente_paso' => 'Proceder con descarga completa usando streaming optimizado'
+            ]);
+
+        } catch (\Exception $e) {
+            $errorType = 'ERROR_GENERAL';
+            $solution = 'Revise logs del servidor';
+
+            if (strpos($e->getMessage(), 'execution time') !== false) {
+                $errorType = 'TIMEOUT';
+                $solution = 'Aumentar timeout del servidor web (Apache/Nginx)';
+            } elseif (strpos($e->getMessage(), 'connection') !== false) {
+                $errorType = 'ERROR_CONEXION_BD';
+                $solution = 'Verificar conexión a base de datos';
+            } elseif (strpos($e->getMessage(), "doesn't exist") !== false) {
+                $errorType = 'PROCEDIMIENTO_NO_EXISTE';
+                $solution = 'Crear el procedimiento almacenado sp_despachados en la BD';
+            }
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Error en la prueba: ' . $e->getMessage(),
+                'tipo_error' => $errorType,
+                'solucion_sugerida' => $solution,
+                'debug' => [
+                    'file' => basename($e->getFile()),
+                    'line' => $e->getLine()
+                ]
+            ], 500);
+        }
+    }    /**
+     * Descargar códigos despachados en CSV
+     * api:get/codigos/despachados/csv/{id_periodo}
+     */
+    public function descargarDespachados($id_periodo)
+    {
+        try {
+            // Validar que el período existe
+            $periodoExists = DB::table('periodoescolar')
+                ->where('idperiodoescolar', $id_periodo)
+                ->exists();
+
+            if (!$periodoExists) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => "El período $id_periodo no existe en la base de datos"
+                ], 404);
+            }
+
+            // ⚡ CONFIGURACIÓN AGRESIVA para grandes volúmenes de datos (190k+ registros)
+            set_time_limit(0); // Sin límite de tiempo
+            ini_set('memory_limit', '4G'); // Aumentar memoria a 4GB
+            ini_set('max_execution_time', 0); // Sin límite
+            ini_set('max_input_time', 0); // Sin límite
+            ini_set('default_socket_timeout', 3600); // 1 hora para socket
+            ini_set('mysql.connect_timeout', 3600); // 1 hora para MySQL
+            ignore_user_abort(true); // Continuar aunque el usuario cierre navegador
+
+            // Desactivar buffering para streaming directo
+            if (ob_get_level()) {
+                ob_end_clean();
+            }
+
+            // Obtener la descripción del período para el nombre del archivo
+            $periodo = DB::table('periodoescolar')
+                ->select('descripcion', 'periodoescolar')
+                ->where('idperiodoescolar', $id_periodo)
+                ->first();
+
+            // Usar descripcion si existe y no está vacía, sino usar periodoescolar como respaldo
+            $descripcionPeriodo = ($periodo && !empty($periodo->descripcion))
+                ? $periodo->descripcion
+                : ($periodo ? $periodo->periodoescolar : $id_periodo);
+
+            // Limpiar la descripción para uso en nombre de archivo
+            $descripcionLimpia = preg_replace('/[^A-Za-z0-9\-_]/', '_', $descripcionPeriodo);
+
+            $nombreArchivo = 'codigos_despachados_' . $descripcionLimpia . '_' . date('Y-m-d_H-i-s') . '.csv';
+
+            // Configurar headers optimizados para streaming
+            $headers = [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="' . $nombreArchivo . '"',
+                'Cache-Control' => 'no-cache, no-store, must-revalidate',
+                'Pragma' => 'no-cache',
+                'Expires' => '0',
+                'Connection' => 'keep-alive',
+                'X-Accel-Buffering' => 'no', // Para nginx
+                'Transfer-Encoding' => 'chunked'
+            ];
+
+            // Crear el callback para generar el CSV con streaming
+            $callback = function() use ($id_periodo) {
+                $file = fopen('php://output', 'w');
+
+                // Agregar BOM para UTF-8
+                fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
+
+                try {
+                    // Verificar la conexión de base de datos
+                    $pdo = DB::getPdo();
+                    if (!$pdo) {
+                        throw new \Exception('No se pudo obtener conexión PDO');
+                    }
+
+                    // Preparar y ejecutar el procedimiento almacenado
+                    $stmt = $pdo->prepare("CALL sp_despachados(?)");
+                    if (!$stmt) {
+                        throw new \Exception('Error al preparar la consulta: ' . implode(', ', $pdo->errorInfo()));
+                    }
+
+                    $result = $stmt->execute([$id_periodo]);
+                    if (!$result) {
+                        throw new \Exception('Error al ejecutar sp_despachados: ' . implode(', ', $stmt->errorInfo()));
+                    }
+
+                    $isFirstRow = true;
+                    $rowCount = 0;
+
+                    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                        // Escribir cabeceras en la primera fila
+                        if ($isFirstRow) {
+                            fputcsv($file, array_keys($row), ';');
+                            $isFirstRow = false;
+                        }
+
+                        // Escribir fila de datos
+                        fputcsv($file, array_values($row), ';');
+                        $rowCount++;
+
+                        // Liberar memoria cada 1000 registros
+                        if ($rowCount % 1000 == 0) {
+                            if (ob_get_level()) {
+                                ob_flush();
+                            }
+                            flush();
+                        }
+                    }
+
+                    // Si no hay datos, escribir mensaje informativo
+                    if ($rowCount == 0) {
+                        if ($isFirstRow) {
+                            fputcsv($file, ['Mensaje'], ';');
+                        }
+                        fputcsv($file, ["No se encontraron códigos despachados para el período $id_periodo"], ';');
+                    }
+
+                    // Agregar línea final con total de registros
+                    fputcsv($file, [], ';'); // Línea vacía
+                    fputcsv($file, ["Total de registros: $rowCount"], ';');
+                    fputcsv($file, ["Generado el: " . date('Y-m-d H:i:s')], ';');
+
+                } catch (\Exception $e) {
+                    // Log del error para debugging
+                    \Log::error('Error en descargarDespachados: ' . $e->getMessage(), [
+                        'id_periodo' => $id_periodo,
+                        'trace' => $e->getTraceAsString()
+                    ]);
+
+                    // Escribir error en el CSV
+                    if ($isFirstRow ?? true) {
+                        fputcsv($file, ['Error'], ';');
+                    }
+                    fputcsv($file, ['Error al procesar datos: ' . $e->getMessage()], ';');
+                    fputcsv($file, ['Por favor contacte al administrador del sistema'], ';');
+                } finally {
+                    if (isset($stmt)) {
+                        $stmt->closeCursor();
+                    }
+                    fclose($file);
+                }
+            };
+
+            return response()->stream($callback, 200, $headers);
+
+        } catch (\Exception $e) {
+            // Log del error principal
+            \Log::error('Error principal en descargarDespachados: ' . $e->getMessage(), [
+                'id_periodo' => $id_periodo,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Error al generar el archivo CSV: ' . $e->getMessage(),
+                'debug_info' => [
+                    'periodo_solicitado' => $id_periodo,
+                    'timestamp' => date('Y-m-d H:i:s'),
+                    'memoria_usada' => memory_get_usage(true),
+                    'limite_memoria' => ini_get('memory_limit')
+                ]
+            ], 500);
+        }
+    }    //api:get>llenarIdsPedidosVal?id_periodo=26
+   public function llenarIdsPedidosVal(Request $request)
+    {
+        $id_periodo = $request->id_periodo;
+
+        $query = DB::SELECT("SELECT pv.*
+            FROM pedidos_val_area pv
+            LEFT JOIN pedidos p ON p.id_pedido = pv.id_pedido
+            WHERE p.id_periodo = ?
+            AND pv.id_libro IS NULL
+            AND p.estado <> '2'
+            LIMIT 1000
+        ", [$id_periodo]); // ✅ Usa binding en vez de interpolar variables (más seguro)
+        // return $query;
+
+        $problemasLibros = [];
+        $contador = 0;
+
+        foreach ($query as $item) {
+            $id_serie = $item->id_serie;
+
+            // ✅ Caso especial: plan lector
+            if ($id_serie == 6) {
+                DB::table("pedidos_val_area")
+                    ->where("id", $item->id)
+                    ->update(["id_libro" => $item->plan_lector]);
+
+                $contador++;
+                continue;
+            }
+            // plus
+            if($id_serie == 22){
+                $buscarLibro = DB::SELECT("
+                SELECT l.*
+                FROM libros_series ls
+                LEFT JOIN libro l ON l.idlibro = ls.idLibro
+                LEFT JOIN asignatura a ON a.idasignatura = l.asignatura_idasignatura
+                WHERE ls.id_serie = ?
+                AND a.area_idarea = ?
+                AND ls.year = ?
+                AND l.Estado_idEstado = '1'
+            ", [$item->id_serie, $item->id_area, $item->year]);
+            }else{
+                 // ✅ Buscar libro correspondiente
+                $buscarLibro = DB::SELECT("
+                    SELECT l.*
+                    FROM libros_series ls
+                    LEFT JOIN libro l ON l.idlibro = ls.idLibro
+                    LEFT JOIN asignatura a ON a.idasignatura = l.asignatura_idasignatura
+                    WHERE ls.id_serie = ?
+                    AND a.area_idarea = ?
+                    AND ls.year = ?
+                    AND l.Estado_idEstado = '1'
+                    AND l.id_folleto IS NULL
+                ", [$item->id_serie, $item->id_area, $item->year]);
+            }
+
+
+            // ✅ Validar resultados
+            if (count($buscarLibro) > 0) {
+                if (count($buscarLibro) > 1) {
+                    $item->mensaje = 'Existe más de un libro';
+                    $problemasLibros[] = $item;
+                    continue;
+                }
+
+                $id_libro = $buscarLibro[0]->idlibro;
+                DB::table("pedidos_val_area")
+                    ->where("id", $item->id)
+                    ->update(["id_libro" => $id_libro]);
+                $contador++;
+            } else {
+                $item->mensaje = 'No se encontró libro';
+                $problemasLibros[] = $item;
+            }
+        }
+
+        // ✅ Mueve el return aquí
+        return [
+            "contador" => "Se actualizaron $contador registros",
+            "problemasLibros" => $problemasLibros
+        ];
+    }
+
+    /**
+     * Mostrar la vista de reportes del sistema
+     * Route: GET /admin/reportes/vista
+     */
+    public function mostrarVistaReportes()
+    {
+        // Obtener períodos disponibles donde pedido_facturacion = 1
+        $periodos = DB::table('periodoescolar')
+                    ->select('idperiodoescolar', 'periodoescolar', 'descripcion')
+                    ->where('pedido_facturacion', 1)
+                    ->orderBy('idperiodoescolar', 'desc')
+                    ->get();
+
+        return view('admin.despachados', compact('periodos'));
+    }
+
+    /**
+     * Probar los procedimientos almacenados según el tipo de reporte
+     * Route: GET /admin/reportes/test/{tipo_reporte}/{id_periodo}
+     */
+    public function testProcedimientoReportes($tipo_reporte, $id_periodo)
+    {
+        try {
+            set_time_limit(600); // 10 minutos
+            ini_set('max_execution_time', 600);
+            ini_set('memory_limit', '1G');
+
+            // Verificar que el período existe y tiene pedido_facturacion = 1
+            $periodo = DB::table('periodoescolar')
+                ->select('idperiodoescolar', 'periodoescolar', 'descripcion')
+                ->where('idperiodoescolar', $id_periodo)
+                ->where('pedido_facturacion', 1)
+                ->first();
+
+            if (!$periodo) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => "El período $id_periodo no existe o no tiene facturación habilitada"
+                ], 404);
+            }
+
+            // Determinar qué procedimiento usar
+            $procedimiento = $this->determinarProcedimiento($tipo_reporte, $id_periodo);
+
+            if (!$procedimiento) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => "Tipo de reporte '$tipo_reporte' no válido"
+                ], 400);
+            }
+
+            $startTime = microtime(true);
+
+            // Ejecutar el procedimiento
+            $pdo = DB::getPdo();
+            $stmt = $pdo->prepare("CALL {$procedimiento['sp']}(?)");
+            $result = $stmt->execute([$procedimiento['periodo']]);
+
+            if (!$result) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => "Error al ejecutar {$procedimiento['sp']}: " . implode(', ', $stmt->errorInfo())
+                ], 500);
+            }
+
+            // Obtener las primeras filas para prueba
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $totalRows = count($rows);
+            $executionTime = round(microtime(true) - $startTime, 2);
+
+            // Obtener estructura de columnas
+            $columns = $totalRows > 0 ? array_keys($rows[0]) : [];
+
+            return response()->json([
+                'status' => 1,
+                'tipo_reporte' => $tipo_reporte,
+                'procedimiento_usado' => $procedimiento['sp'],
+                'periodo' => $periodo->descripcion,
+                'total_registros_aproximado' => number_format($totalRows),
+                'estructura_columnas' => $columns,
+                'tiempo_ejecucion_segundos' => $executionTime,
+                'primeros_registros' => array_slice($rows, 0, 3),
+                'message' => 'Procedimiento ejecutado exitosamente'
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error("Error en testProcedimientoReportes ($tipo_reporte, $id_periodo): " . $e->getMessage());
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Error interno: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Descargar reportes en CSV según el tipo
+     * Route: GET /admin/reportes/{tipo_reporte}/{id_periodo}
+     */
+    public function descargarReportes($tipo_reporte, $id_periodo, Request $request)
+    {
+        try {
+            // Validar que el período existe y tiene pedido_facturacion = 1
+            $periodoExists = DB::table('periodoescolar')
+                ->where('idperiodoescolar', $id_periodo)
+                ->where('pedido_facturacion', 1)
+                ->exists();
+
+            if (!$periodoExists) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => "El período $id_periodo no existe en la base de datos o no tiene facturación habilitada"
+                ], 404);
+            }
+
+            // Determinar qué procedimiento usar
+            $procedimiento = $this->determinarProcedimiento($tipo_reporte, $id_periodo);
+
+            if (!$procedimiento) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => "Tipo de reporte '$tipo_reporte' no válido"
+                ], 400);
+            }
+
+            // Obtener formato solicitado (por defecto CSV)
+            $formato = $request->query('formato', 'csv');
+
+            // ⚡ CONFIGURACIÓN AGRESIVA para grandes volúmenes de datos
+            set_time_limit(0);
+            ini_set('memory_limit', '4G');
+            ini_set('max_execution_time', 0);
+            ignore_user_abort(true);
+
+            $startTime = microtime(true);
+
+            // Verificar previamente si hay datos para este reporte
+            try {
+                $pdo = DB::getPdo();
+                $stmt = $pdo->prepare("CALL {$procedimiento['sp']}(?)");
+                $result = $stmt->execute([$procedimiento['periodo']]);
+
+                if (!$result) {
+                    $errorInfo = implode('; ', $stmt->errorInfo());
+                    \Log::error("Error al ejecutar procedimiento {$procedimiento['sp']}: " . $errorInfo);
+
+                    return response()->json([
+                        'status' => 0,
+                        'message' => 'Error al ejecutar el procedimiento almacenado',
+                        'error' => $errorInfo,
+                        'tipo_reporte' => $tipo_reporte,
+                        'id_periodo' => $id_periodo
+                    ], 500);
+                }
+
+                // Verificar si hay al menos un registro
+                $hasData = $stmt->fetch(PDO::FETCH_ASSOC);
+                $stmt->closeCursor(); // Cerrar cursor para liberar recursos
+
+                if (!$hasData) {
+                    \Log::warning("No hay datos disponibles para $tipo_reporte período $id_periodo");
+
+                    return response()->json([
+                        'status' => 0,
+                        'message' => 'No hay datos disponibles para este período y tipo de reporte',
+                        'tipo_reporte' => $tipo_reporte,
+                        'id_periodo' => $id_periodo,
+                        'empty_result' => true
+                    ], 404);
+                }
+
+            } catch (\Exception $e) {
+                \Log::error("Error verificando datos para $tipo_reporte período $id_periodo: " . $e->getMessage());
+
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Error al verificar disponibilidad de datos',
+                    'error' => $e->getMessage(),
+                    'tipo_reporte' => $tipo_reporte,
+                    'id_periodo' => $id_periodo
+                ], 500);
+            }
+
+            if ($formato === 'excel') {
+                if($procedimiento['sp'] === 'sp_facturado'){
+                    return $this->generarJsonFacturado($tipo_reporte, $id_periodo, $procedimiento, $startTime);
+                }
+                if($procedimiento['sp'] === 'sp_ventas'){
+                    return $this->generarJsonVentas($tipo_reporte, $id_periodo, $procedimiento, $startTime);
+                }
+                return $this->generarExcel($tipo_reporte, $id_periodo, $procedimiento, $startTime);
+            } else {
+                return $this->generarCSV($tipo_reporte, $id_periodo, $procedimiento, $startTime);
+            }
+
+        } catch (\Exception $e) {
+            \Log::error("Error principal en descargarReportes ($tipo_reporte, $id_periodo): " . $e->getMessage());
+
+            return response()->json([
+                'status' => 0,
+                'message' => 'Error interno del servidor: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    private function generarJsonFacturado($tipo_reporte, $id_periodo, $procedimiento, $startTime){
+        try {
+            // Usar DB::select en lugar de PDO directo para evitar problemas de packets
+            $datos = DB::select("CALL {$procedimiento['sp']}(?)", [$procedimiento['periodo']]);
+
+            $totalTime = round(microtime(true) - $startTime, 2);
+            \Log::info("JSON Facturado generado: " . count($datos) . " registros en {$totalTime}s");
+
+            return response()->json([
+                'status' => 1,
+                'datos' => $datos,
+                'total_registros' => count($datos),
+                'tiempo_ejecucion' => $totalTime
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error("Error generando JSON Facturado: " . $e->getMessage());
+            return response()->json([
+                'status' => 0,
+                'message' => 'Error al generar datos: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    private function generarJsonVentas($tipo_reporte, $id_periodo, $procedimiento, $startTime){
+        try {
+            // Usar DB::select en lugar de PDO directo para evitar problemas de packets
+            $datos = DB::select("CALL {$procedimiento['sp']}(?)", [$procedimiento['periodo']]);
+
+            $totalTime = round(microtime(true) - $startTime, 2);
+            \Log::info("JSON Ventas generado: " . count($datos) . " registros en {$totalTime}s");
+
+            return response()->json([
+                'status' => 1,
+                'datos' => $datos,
+                'total_registros' => count($datos),
+                'tiempo_ejecucion' => $totalTime
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error("Error generando JSON Ventas: " . $e->getMessage());
+            return response()->json([
+                'status' => 0,
+                'message' => 'Error al generar datos: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    private function generarExcelFacturado($tipo_reporte, $id_periodo, $procedimiento, $startTime){
+        if (!class_exists('PhpOffice\PhpSpreadsheet\Spreadsheet')) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'La librería PhpSpreadsheet no está instalada. Use formato CSV como alternativa.'
+            ], 400);
+        }
+
+        try {
+            $periodo = DB::table('periodoescolar')
+                ->select('descripcion', 'periodoescolar')
+                ->where('idperiodoescolar', $id_periodo)
+                ->first();
+
+            $descripcionPeriodo = ($periodo && !empty($periodo->descripcion)) 
+                ? $periodo->descripcion 
+                : ($periodo ? $periodo->periodoescolar : $id_periodo);
+
+            $descripcionLimpia = preg_replace('/[^A-Za-z0-9\-_]/', '_', $descripcionPeriodo);
+            $fecha = date('Y-m-d_H-i-s');
+            $filename = "{$tipo_reporte}_{$descripcionLimpia}_{$fecha}.xlsx";
+
+            $headers = [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Content-Disposition' => "attachment; filename=\"$filename\"",
+                'Cache-Control' => 'no-cache, no-store, must-revalidate',
+                'Pragma' => 'no-cache',
+                'Expires' => '0',
+            ];
+
+            return response()->stream(function() use ($procedimiento, $tipo_reporte, $id_periodo, $startTime) {
+                try {
+                    $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+                    $sheet = $spreadsheet->getActiveSheet();
+                    $sheet->setTitle(ucfirst($tipo_reporte));
+
+                    $pdo = DB::getPdo();
+                    $stmt = $pdo->prepare("CALL {$procedimiento['sp']}(?)");
+                    $stmt->execute([$procedimiento['periodo']]);
+
+                    // === ENCABEZADOS FIJOS ===
+                    $headers = [
+                        'Documento', 'Institución', 'Asesor', 'Código Combo',
+                        'Precio Unit.', 'Cantidad', 'Tipo Producto', 'Fecha Documento'
+                    ];
+
+                    foreach ($headers as $col => $header) {
+                        $sheet->setCellValue(chr(65 + $col) . '1', $header);
+                    }
+
+                    $rowCount = 2; // Datos empiezan en fila 2
+                    $mergeRanges = []; // Para combinar celdas (rowspan)
+
+                    // === CASO ESPECIAL: FACTURADO CON DESGLOSE ===
+                    if ($tipo_reporte === 'facturado') {
+                        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                            $codigos = !empty($row['Desglose_combo'])
+                                ? array_filter(explode(',', $row['Desglose_combo']))
+                                : ['(Sin combo)'];
+
+                            $numCodigos = count($codigos);
+                            $inicioFila = $rowCount;
+                            $finFila = $inicioFila + $numCodigos - 1;
+
+                            foreach ($codigos as $idx => $codigo) {
+                                $filaActual = $rowCount;
+
+                                // Solo en la primera fila del grupo
+                                if ($idx === 0) {
+                                    $sheet->setCellValue('A' . $filaActual, $row['documentoVenta'] ?? '');
+                                    $sheet->setCellValue('B' . $filaActual, $row['nombreInstitucion'] ?? '');
+                                    $sheet->setCellValue('C' . $filaActual, $row['asesor'] ?? '');
+                                    $sheet->setCellValue('E' . $filaActual, $row['precio'] ?? 0);
+                                    $sheet->setCellValue('F' . $filaActual, $row['cantidad'] ?? 0);
+                                    $sheet->setCellValue('G' . $filaActual, $row['tipo_producto'] ?? '');
+                                    $sheet->setCellValue('H' . $filaActual, $row['fecha_documento'] ?? '');
+                                }
+
+                                // Siempre: código del combo
+                                $sheet->setCellValue('D' . $filaActual, trim($codigo));
+
+                                $rowCount++;
+                            }
+
+                            // === AÑADIR MERGES (rowspan) si hay más de 1 código ===
+                            if ($numCodigos > 1) {
+                                $mergeRanges[] = "A{$inicioFila}:A{$finFila}"; // Documento
+                                $mergeRanges[] = "B{$inicioFila}:B{$finFila}"; // Institución
+                                $mergeRanges[] = "C{$inicioFila}:C{$finFila}"; // Asesor
+                                $mergeRanges[] = "E{$inicioFila}:E{$finFila}"; // Precio
+                                $mergeRanges[] = "F{$inicioFila}:F{$finFila}"; // Cantidad
+                                $mergeRanges[] = "G{$inicioFila}:G{$finFila}"; // Tipo
+                                $mergeRanges[] = "H{$inicioFila}:H{$finFila}"; // Fecha
+                            }
+                        }
+                    } 
+                    // === OTROS REPORTES: Formato normal (sin desglose) ===
+                    else {
+                        $headerWritten = false;
+                        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                            if (!$headerWritten) {
+                                $col = 'A';
+                                foreach (array_keys($row) as $header) {
+                                    $sheet->setCellValue($col . '1', $header);
+                                    $col++;
+                                }
+                                $headerWritten = true;
+                                $rowCount = 2;
+                            }
+
+                            $col = 'A';
+                            foreach (array_values($row) as $value) {
+                                $sheet->setCellValue($col . $rowCount, $value);
+                                $col++;
+                            }
+                            $rowCount++;
+                        }
+                    }
+
+                    // === APLICAR MERGES ===
+                    if (!empty($mergeRanges)) {
+                        foreach ($mergeRanges as $range) {
+                            $sheet->mergeCells($range);
+                            // Opcional: centrar verticalmente
+                            $sheet->getStyle($range)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+                        }
+                    }
+
+                    // === AUTOAJUSTAR COLUMNAS ===
+                    foreach (range('A', 'H') as $col) {
+                        $sheet->getColumnDimension($col)->setAutoSize(true);
+                    }
+
+                    // === LOG FINAL ===
+                    $totalTime = round(microtime(true) - $startTime, 2);
+                    \Log::info("Excel $tipo_reporte generado: " . ($rowCount-1) . " filas en {$totalTime}s");
+
+                    $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+                    $writer->save('php://output');
+
+                    $spreadsheet->disconnectWorksheets();
+                    unset($spreadsheet, $stmt, $pdo);
+
+                } catch (\Exception $e) {
+                    \Log::error("Error en stream Excel $tipo_reporte: " . $e->getMessage());
+                    $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+                    $sheet = $spreadsheet->getActiveSheet();
+                    $sheet->setCellValue('A1', 'Error');
+                    $sheet->setCellValue('B1', $e->getMessage());
+                    $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+                    $writer->save('php://output');
+                }
+            }, 200, $headers);
+
+        } catch (\Exception $e) {
+            \Log::error("Error configurando Excel: " . $e->getMessage());
+            return response()->json([
+                'status' => 0,
+                'message' => 'Error al generar Excel: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    private function generarCSV($tipo_reporte, $id_periodo, $procedimiento, $startTime)
+    {
+        // Obtener la descripción del período
+        $periodo = DB::table('periodoescolar')
+            ->select('descripcion', 'periodoescolar')
+            ->where('idperiodoescolar', $id_periodo)
+            ->first();
+
+        // DEBUG: Log para ver qué se está obteniendo
+        \Log::info('Generando CSV - Información del período', [
+            'id_periodo' => $id_periodo,
+            'periodo_encontrado' => $periodo ? 'SI' : 'NO',
+            'descripcion' => $periodo->descripcion ?? 'NULL',
+            'periodoescolar' => $periodo->periodoescolar ?? 'NULL'
+        ]);
+
+        // Usar descripcion si existe y no está vacía, sino usar periodoescolar como respaldo
+        $descripcionPeriodo = ($periodo && !empty($periodo->descripcion))
+            ? $periodo->descripcion
+            : ($periodo ? $periodo->periodoescolar : $id_periodo);
+
+        // Limpiar la descripción para uso en nombre de archivo (quitar caracteres especiales)
+        $descripcionLimpia = preg_replace('/[^A-Za-z0-9\-_]/', '_', $descripcionPeriodo);
+
+        \Log::info('Generando CSV - Nombre del archivo', [
+            'descripcion_original' => $descripcionPeriodo,
+            'descripcion_limpia' => $descripcionLimpia
+        ]);
+
+        // Preparar nombre del archivo con descripción del período
+        $fecha = date('Y-m-d_H-i-s');
+        $filename = "{$tipo_reporte}_{$descripcionLimpia}_{$fecha}.csv";
+
+        // Headers para descarga CSV
+        $headers = [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"$filename\"",
+            'Cache-Control' => 'no-cache, no-store, must-revalidate',
+            'Pragma' => 'no-cache',
+            'Expires' => '0',
+        ];
+
+        // Usar streaming para archivos grandes
+        return response()->stream(function() use ($procedimiento, $tipo_reporte, $id_periodo, $startTime) {
+            $output = fopen('php://output', 'w');
+
+            try {
+                // BOM para UTF-8 (Excel compatibility)
+                fwrite($output, "\xEF\xBB\xBF");
+
+                // Ejecutar procedimiento almacenado
+                $pdo = DB::getPdo();
+                $stmt = $pdo->prepare("CALL {$procedimiento['sp']}(?)");
+                $result = $stmt->execute([$procedimiento['periodo']]);
+
+                if (!$result) {
+                    $errorInfo = implode('; ', $stmt->errorInfo());
+                    \Log::error("Error ejecutando procedimiento {$procedimiento['sp']}: " . $errorInfo);
+
+                    fwrite($output, "Error,Mensaje\n");
+                    fwrite($output, "Error al ejecutar procedimiento," . $errorInfo . "\n");
+                    return;
+                }
+
+                $headerWritten = false;
+                $rowCount = 0;
+
+                // Leer y escribir datos row by row
+                while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                    // Escribir header en la primera fila
+                    if (!$headerWritten) {
+                        fputcsv($output, array_keys($row), ';');
+                        $headerWritten = true;
+                    }
+
+                    // Escribir datos
+                    fputcsv($output, array_values($row), ';');
+                    $rowCount++;
+
+                    // Log de progreso cada 50k registros
+                    if ($rowCount % 50000 === 0) {
+                        $elapsed = round(microtime(true) - $startTime, 2);
+                        \Log::info("Progreso descarga CSV $tipo_reporte: $rowCount registros procesados en {$elapsed}s");
+                    }
+                }
+
+                // Si no hay datos, escribir mensaje informativo
+                if ($rowCount === 0) {
+                    \Log::warning("No se encontraron datos para $tipo_reporte período $id_periodo");
+
+                    if (!$headerWritten) {
+                        fwrite($output, "Mensaje\n");
+                    }
+                    fwrite($output, "No se encontraron datos para este período y tipo de reporte\n");
+                    fwrite($output, "Período: $id_periodo\n");
+                    fwrite($output, "Tipo de reporte: $tipo_reporte\n");
+                    fwrite($output, "Fecha consulta: " . date('Y-m-d H:i:s') . "\n");
+                } else {
+                    $totalTime = round(microtime(true) - $startTime, 2);
+                    \Log::info("Descarga CSV $tipo_reporte completada: $rowCount registros en {$totalTime}s");
+                }
+
+            } catch (\Exception $e) {
+                \Log::error("Error en streaming descarga CSV $tipo_reporte: " . $e->getMessage());
+                fwrite($output, "Error,Mensaje\n");
+                fwrite($output, "Error interno," . $e->getMessage() . "\n");
+            } finally {
+                fclose($output);
+            }
+        }, 200, $headers);
+    }
+
+    
+    /**
+     * Generar archivo Excel
+     */
+    private function generarExcel($tipo_reporte, $id_periodo, $procedimiento, $startTime)
+    {
+        // Verificar si PhpSpreadsheet está disponible
+        if (!class_exists('PhpOffice\PhpSpreadsheet\Spreadsheet')) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'La librería PhpSpreadsheet no está instalada. Use formato CSV como alternativa.'
+            ], 400);
+        }
+
+        try {
+            // Obtener la descripción del período
+            $periodo = DB::table('periodoescolar')
+                ->select('descripcion', 'periodoescolar')
+                ->where('idperiodoescolar', $id_periodo)
+                ->first();
+
+            // Usar descripcion si existe y no está vacía, sino usar periodoescolar como respaldo
+            $descripcionPeriodo = ($periodo && !empty($periodo->descripcion))
+                ? $periodo->descripcion
+                : ($periodo ? $periodo->periodoescolar : $id_periodo);
+
+            // Limpiar la descripción para uso en nombre de archivo (quitar caracteres especiales)
+            $descripcionLimpia = preg_replace('/[^A-Za-z0-9\-_]/', '_', $descripcionPeriodo);
+
+            // Preparar nombre del archivo con descripción del período
+            $fecha = date('Y-m-d_H-i-s');
+            $filename = "{$tipo_reporte}_{$descripcionLimpia}_{$fecha}.xlsx";
+
+            // Headers para descarga Excel
+            $headers = [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Content-Disposition' => "attachment; filename=\"$filename\"",
+                'Cache-Control' => 'no-cache, no-store, must-revalidate',
+                'Pragma' => 'no-cache',
+                'Expires' => '0',
+            ];
+
+
+            return response()->stream(function() use ($procedimiento, $tipo_reporte, $id_periodo, $startTime) {
+                try {
+                    $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+                    $sheet = $spreadsheet->getActiveSheet();
+                    $sheet->setTitle(ucfirst($tipo_reporte));
+
+                    // Ejecutar procedimiento almacenado
+                    $pdo = DB::getPdo();
+                    $stmt = $pdo->prepare("CALL {$procedimiento['sp']}(?)");
+                    $stmt->execute([$procedimiento['periodo']]);
+
+                    // === CASO ESPECIAL: FACTURADO (agrupado por factura) ===
+                    if ($tipo_reporte === 'facturado') {
+                        $facturas = [];
+                        $rowCount = 0;
+
+                        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                            $key = $row['documentoVenta'] ?? 'SIN_DOC_' . $rowCount;
+
+                            if (!isset($facturas[$key])) {
+                                $facturas[$key] = [
+                                    'documentoVenta'     => $row['documentoVenta'] ?? '',
+                                    'nombreInstitucion' => $row['nombreInstitucion'] ?? '',
+                                    'asesor'             => $row['asesor'] ?? '',
+                                    'precio'             => $row['precio'] ?? 0,
+                                    'cantidad'           => $row['cantidad'] ?? 0,
+                                    'tipo_producto'      => $row['tipo_producto'] ?? '',
+                                    'fecha_documento'    => $row['fecha_documento'] ?? '',
+                                    'codigos'            => []
+                                ];
+                            }
+
+                            // === DESGLOSE DE COMBOS ===
+                            if (!empty($row['Desglose_combo'])) {
+                                $codigos = array_filter(explode(',', $row['Desglose_combo']));
+                                foreach ($codigos as $cod) {
+                                    $cod = trim($cod);
+                                    if ($cod && !in_array($cod, $facturas[$key]['codigos'])) {
+                                        // BONUS: Agregar nombre del libro
+                                        $nombreLibro = DB::table('libros_series')
+                                            ->where('codigo_liquidacion', $cod)
+                                            ->value('nombre');
+
+                                        $texto = $cod;
+                                        if ($nombreLibro) {
+                                            $texto .= " - $nombreLibro";
+                                        }
+                                        $facturas[$key]['codigos'][] = $texto;
+                                    }
+                                }
+                            }
+                            $rowCount++;
+                        }
+
+                        // Encabezados personalizados
+                        $sheet->setCellValue('A1', 'Documento');
+                        $sheet->setCellValue('B1', 'Institución');
+                        $sheet->setCellValue('C1', 'Asesor');
+                        $sheet->setCellValue('D1', 'Desglose Combo');
+                        $sheet->setCellValue('E1', 'Precio Unit.');
+                        $sheet->setCellValue('F1', 'Cantidad');
+                        $sheet->setCellValue('G1', 'Tipo Producto');
+                        $sheet->setCellValue('H1', 'Fecha Documento');
+
+                        // Datos agrupados
+                        $fila = 2;
+                        foreach ($facturas as $f) {
+                            $desglose = !empty($f['codigos'])
+                                ? implode("\n", $f['codigos'])  // Salto de línea para mejor lectura en Excel
+                                : '(Sin combo)';
+
+                            $sheet->setCellValue("A$fila", $f['documentoVenta']);
+                            $sheet->setCellValue("B$fila", $f['nombreInstitucion']);
+                            $sheet->setCellValue("C$fila", $f['asesor']);
+                            $sheet->setCellValue("D$fila", $desglose);
+                            $sheet->setCellValue("E$fila", $f['precio']);
+                            $sheet->setCellValue("F$fila", $f['cantidad']);
+                            $sheet->setCellValue("G$fila", $f['tipo_producto']);
+                            $sheet->setCellValue("H$fila", $f['fecha_documento']);
+
+                            // Ajustar altura de fila y permitir saltos de línea
+                            $sheet->getRowDimension($fila)->setRowHeight(-1); // Auto altura
+                            $sheet->getStyle("D$fila")->getAlignment()
+                                ->setWrapText(true)
+                                ->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_TOP);
+
+                            $fila++;
+                        }
+
+                        // Autoajustar columnas
+                        foreach (range('A', 'H') as $col) {
+                            $sheet->getColumnDimension($col)->setAutoSize(true);
+                        }
+
+                        \Log::info("Excel FACTURADO agrupado generado: " . count($facturas) . " facturas en " . round(microtime(true) - $startTime, 2) . "s");
+                    }
+                    // === OTROS REPORTES: Formato normal (fila por fila) ===
+                    else {
+                        $headerWritten = false;
+                        $rowCount = 1;
+
+                        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                            if (!$headerWritten) {
+                                // Escribir headers
+                                $col = 'A';
+                                foreach (array_keys($row) as $header) {
+                                    $sheet->setCellValue($col . '1', $header);
+                                    $col++;
+                                }
+                                $headerWritten = true;
+                                $rowCount = 2;
+                            }
+
+                            // Escribir datos
+                            $col = 'A';
+                            foreach (array_values($row) as $value) {
+                                $sheet->setCellValue($col . $rowCount, $value);
+                                $col++;
+                            }
+                            $rowCount++;
+
+                            if ($rowCount % 10000 === 0) {
+                                $elapsed = round(microtime(true) - $startTime, 2);
+                                \Log::info("Progreso Excel $tipo_reporte: " . ($rowCount-1) . " filas en {$elapsed}s");
+                            }
+                        }
+                    }
+
+                    // Generar archivo Excel
+                    $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+                    $writer->save('php://output');
+
+                    $spreadsheet->disconnectWorksheets();
+                    unset($spreadsheet, $stmt);
+
+                } catch (\Exception $e) {
+                    \Log::error("Error en generación Excel $tipo_reporte: " . $e->getMessage());
+                    // En caso de error, generar un Excel simple con el error
+                    $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+                    $sheet = $spreadsheet->getActiveSheet();
+                    $sheet->setCellValue('A1', 'Error');
+                    $sheet->setCellValue('B1', $e->getMessage());
+
+                    $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+                    $writer->save('php://output');
+                }
+            }, 200, $headers);
+
+        } catch (\Exception $e) {
+            \Log::error("Error configurando Excel: " . $e->getMessage());
+            return response()->json(['status' => 0, 'message' => 'Error al generar Excel'], 500);
+        }
+    }
+
+    /**
+     * Determinar qué procedimiento almacenado usar según el tipo de reporte y período
+     */
+    private function determinarProcedimiento($tipo_reporte, $id_periodo)
+    {
+        switch ($tipo_reporte) {
+            case 'despachados':
+                return [
+                    'sp' => 'sp_despachados',
+                    'periodo' => $id_periodo
+                ];
+
+            case 'pedidos_alcances':
+                // Para períodos > 27 usa sp_pedidos_alcances_new
+                // Para períodos ≤ 26 usa sp_pedidos_alcances_old
+                if ($id_periodo >= 27) {
+                    return [
+                        'sp' => 'sp_pedidos_alcances_new',
+                        'periodo' => $id_periodo
+                    ];
+                } else {
+                    return [
+                        'sp' => 'sp_pedidos_alcances_old',
+                        'periodo' => $id_periodo
+                    ];
+                }
+
+            case 'liquidados':
+                return [
+                    'sp' => 'sp_liquidados',
+                    'periodo' => $id_periodo
+                ];
+
+            case 'devoluciones':
+                return [
+                    'sp' => 'sp_devoluciones',
+                    'periodo' => $id_periodo
+                ];
+
+            case 'ventas':
+                return [
+                    'sp' => 'sp_ventas',
+                    'periodo' => $id_periodo
+                ];
+            case 'facturado':
+                return [
+                    'sp' => 'sp_facturado',
+                    'periodo' => $id_periodo
+                ];
+            default:
+                return null;
+        }
+    }
+
 }
 
 

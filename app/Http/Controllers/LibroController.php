@@ -41,6 +41,41 @@ class LibroController extends Controller
         }
         return $libro;
     }
+    //api:get/getxLibrosdemo
+    public function getxNombredemo($nombrelike){
+        $query = DB::SELECT("SELECT l.nombrelibro, l.weblibro, l.demo,  l.idlibro,l.asignatura_idasignatura , l.conteodemo,
+        a.area_idarea ,l.portada, s.nombre_serie, ar.nombrearea
+         FROM libros_series ls
+         LEFT JOIN series s ON ls.id_serie = s.id_serie
+         LEFT JOIN libro l ON ls.idLibro = l.idlibro
+         LEFT JOIN asignatura a ON l.asignatura_idasignatura = a.idasignatura
+         LEFT JOIN area ar ON a.area_idarea = ar.idarea
+         WHERE l.Estado_idEstado = '1'
+         AND a.estado = '1'
+         AND l.demo IS NOT NULL
+         AND TRIM(l.demo) <> ''
+         AND l.nombrelibro like '%$nombrelike%'
+        ");
+        return $query;
+    }
+
+    //api:get/getxAreasdemo
+    public function getxAreasdemo($nombrearea){
+        $query = DB::SELECT("SELECT l.nombrelibro, l.weblibro, l.demo,  l.idlibro,l.asignatura_idasignatura , l.conteodemo,
+        a.area_idarea ,l.portada, s.nombre_serie, ar.nombrearea
+         FROM libros_series ls
+         LEFT JOIN series s ON ls.id_serie = s.id_serie
+         LEFT JOIN libro l ON ls.idLibro = l.idlibro
+         LEFT JOIN asignatura a ON l.asignatura_idasignatura = a.idasignatura
+         LEFT JOIN area ar ON a.area_idarea = ar.idarea
+         WHERE l.Estado_idEstado = '1'
+         AND a.estado = '1'
+         AND l.demo IS NOT NULL
+         AND TRIM(l.demo) <> ''
+         AND ar.nombrearea = '$nombrearea'
+        ");
+        return $query;
+    }
     //api:get/getAllBooks
     public function getAllBooks(Request $request){
         $query = DB::SELECT("SELECT l.nombrelibro, l.demo,  l.idlibro,l.asignatura_idasignatura ,
@@ -529,7 +564,9 @@ class LibroController extends Controller
                 'ls.iniciales', 'ls.codigo_liquidacion', 'ls.year', 'ls.version', 'ls.id_libro_plus',
                 's.id_serie', 's.nombre_serie', 'ls.nombre', 'p.ifcombo', 'p.codigos_combos',
                 'folleto.nombrelibro as folleto_nombre','folleto_ls.id_serie as folleto_id_serie',
-                'libro_plus.nombrelibro as libro_plus_nombre','libro_plus_ls.id_serie as libro_plus_id_serie'
+                'libro_plus.nombrelibro as libro_plus_nombre','libro_plus_ls.id_serie as libro_plus_id_serie',
+                'gpv3.gru_pro_nombre as nombre_grupo_v3','p.grupo_codigo_para_v3',
+                'p.id_pro_codigo_padre','pdr.pro_nombre AS nombre_producto_padre'
         )
         ->leftJoin('asignatura as a', 'a.idasignatura', '=', 'l.asignatura_idasignatura')
         ->leftJoin('libros_series as ls', 'ls.idLibro', '=', 'l.idlibro')
@@ -538,7 +575,9 @@ class LibroController extends Controller
         ->leftJoin('libros_series as folleto_ls', 'folleto_ls.idLibro', '=', 'folleto.idlibro')
         ->leftJoin('libro as libro_plus', 'libro_plus.idlibro', '=', 'ls.id_libro_plus')
         ->leftJoin('libros_series as libro_plus_ls', 'libro_plus_ls.idLibro', '=', 'libro_plus.idlibro')
-        ->leftJoin('1_4_cal_producto as p', 'ls.codigo_liquidacion', '=', 'p.pro_codigo');
+        ->leftJoin('1_4_cal_producto as p', 'ls.codigo_liquidacion', '=', 'p.pro_codigo')
+        ->leftJoin('1_4_grupo_productos as gpv3', 'p.grupo_codigo_para_v3', '=', 'gpv3.gru_pro_codigo')
+        ->leftJoin('1_4_cal_producto AS pdr','pdr.pro_codigo','=','p.id_pro_codigo_padre');
 
     // Determine the WHERE clause based on the 'tipo' parameter
     switch ($request->tipo) {
@@ -641,6 +680,8 @@ class LibroController extends Controller
                         'pro_descripcion'   => $libro->descripcionlibro,
                         'ifcombo'           => $request->ifcombo,
                         'codigos_combos'    => $request->codigos_combos ?? null,
+                        'grupo_codigo_para_v3' => $request->grupo_codigo_para_v3 ?? null,
+                        'id_pro_codigo_padre'   => $request->id_pro_codigo_padre ?? null
                     ]);
                     // actualizar por codigo de liquidacion en libro series
                     // DB::table('libros_series')
@@ -677,6 +718,40 @@ class LibroController extends Controller
         return ["status"=>"1", "message" => "Se guardo correctamente"];
         }else{
         return ["error"=>"0", "message" => "No se pudo actualizar/guardar"];
+        }
+    }
+    //actualizar campo conteodemo
+    public function editarconteodemo(Request $request)
+    {
+        try {
+            if ($request->idlibro) {
+                $libro = Libro::find($request->idlibro);
+                if ($libro) {
+                    // Aumentar el conteo en 1 (maneja null como 0)
+                    $libro->conteodemo = ($libro->conteodemo ?? 0) + 1;
+                    $libro->save();
+                    return response()->json([
+                        "status" => 1,
+                        "message" => "Se añadió el contador al libro con ID {$libro->idlibro}",
+                        "conteodemo" => $libro->conteodemo
+                    ]);
+                } else {
+                    return response()->json([
+                        "status" => 0,
+                        "message" => "No se encontró el libro con ID {$request->idlibro}"
+                    ]);
+                }
+            } else {
+                return response()->json([
+                    "status" => 0,
+                    "message" => "No se recibió un ID de libro válido"
+                ]);
+            }
+        } catch (\Exception $ex) {
+            return response()->json([
+                "status" => 0,
+                "message" => "Hubo problemas con la conexión al servidor: " . $ex->getMessage()
+            ]);
         }
     }
     //para eliminar el libro

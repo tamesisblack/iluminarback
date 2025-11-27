@@ -462,7 +462,9 @@ class VerificacionControllerAnterior extends Controller
                 c.porcentaje_personalizado_regalado,
                 c.codigo_proforma,
                 c.proforma_empresa,
-
+                c.codigo_paquete,
+                c.combo,
+                c.codigo_combo,
                 (
                     SELECT
                         CASE
@@ -505,6 +507,7 @@ class VerificacionControllerAnterior extends Controller
              ->where('libro_idlibro', $request->libro_id)
              ->where('estado_liquidacion', '<>', '3')
              ->where('plus', $plus)
+             ->whereNull('combo')
              ->get();
              return $codigos;
 
@@ -626,8 +629,11 @@ class VerificacionControllerAnterior extends Controller
                     'cantidad_items'            => $item->cantidad_items?? null,
                     'cantidad_subitems'         => $item->cantidad_subitems?? null,
                     'verificacion'              => $item->verificacion?? null,
+                    'idtipodocumento'           => $item->idtipodocumento?? null,
                     'descuento'                 => $item->descuento?? null,
                     'porcentaje_personalizado_regalado' => $item->porcentaje_personalizado_regalado?? null,
+                    'codigo_proforma'           => $item->codigo_proforma?? null,
+                    'proforma_empresa'          => $item->proforma_empresa?? null,
                 ];
                 $contador++;
             }
@@ -1165,6 +1171,7 @@ class VerificacionControllerAnterior extends Controller
     public function notificacionesVerificaciones(Request $request)
     {
         $idFacturador = $request->input("idFacturador", 0);
+        $id_group = $request->input("id_group", 0);
         // Consulta secundaria
         $notificacionFactura = DB::table('notificaciones_general')
             // ->where('tipo', '=', '0')
@@ -1338,6 +1345,265 @@ class VerificacionControllerAnterior extends Controller
                     $item->id_institucion       = $padre ? $padre->idInstitucion : null;
                     $item->nombreInstitucion    = $padre ? $padre->nombreInstitucion : null;
                 }
+                if ($item->tipo == '6') {
+                    $padre = DB::TABLE('fichero_mercado as fm')
+                    ->where('fm.fm_id', $item->id_padre)
+                    ->leftJoin('institucion as ins', 'fm.idInstitucion', '=', 'ins.idInstitucion')
+                    ->leftJoin('usuario as us', 'ins.asesor_id', '=', 'us.idusuario')
+                    ->leftJoin('provincia as pro', 'ins.idprovincia', '=', 'pro.idprovincia')
+                    ->leftJoin('ciudad as ciu', 'ins.ciudad_id', '=', 'ciu.idciudad')
+                    ->leftJoin('parroquia as parr', 'ins.parr_id', '=', 'parr.parr_id')
+                    ->leftJoin('periodoescolar as pe', 'fm.idperiodoescolar', '=', 'pe.idperiodoescolar')
+                    // LEFT JOIN de usuarios creador y editor
+                    ->leftJoin('usuario as usercreated', 'fm.user_created', '=', 'usercreated.idusuario')
+                    ->leftJoin('usuario as user_edit', 'fm.user_edit', '=', 'user_edit.idusuario')
+                    // LEFT JOIN a usuarios desde JSON usando DB::raw
+                    ->leftJoin('usuario as user_envia', DB::raw('user_envia.idusuario'), '=', DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_enviar_para_aprobacion, '$.user_envia_para_aprobacion'))"))
+                    ->leftJoin('usuario as user_aprob', DB::raw('user_aprob.idusuario'), '=', DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_aprobacion, '$.user_aprobacion'))"))
+                    ->leftJoin('usuario as user_rechazo', DB::raw('user_rechazo.idusuario'), '=', DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_rechazo, '$.user_rechazo'))"))
+                    ->select(
+                        'ins.idInstitucion',
+                        'ins.nombreInstitucion',
+                        'ins.direccionInstitucion',
+                        'ins.idprovincia',
+                        'ins.asesor_id',
+                        'ins.ciudad_id',
+                        'ins.parr_id',
+                        'fm.fm_id',
+                        'fm.fm_estado',
+                        'fm.fm_observacion',
+                        'fm.created_at',
+                        'fm.updated_at',
+                        'fm.idperiodoescolar',
+                        'pe.descripcion as descripcion_periodoescolar',
+                        DB::raw("CONCAT(us.nombres, ' ', us.apellidos) as usuario_asesor"),
+                        'pro.nombreprovincia',
+                        'ciu.nombre as nombre_ciudad',
+                        'parr.parr_nombre',
+                        // Campos de usuario creador y editor
+                        'usercreated.nombres as usercreated_nombres',
+                        'usercreated.apellidos as usercreated_apellidos',
+                        'user_edit.nombres as user_edit_nombres',
+                        'user_edit.apellidos as user_edit_apellidos',
+                        // Campos de usuarios del JSON
+                        'user_envia.nombres as user_envia_nombres',
+                        'user_envia.apellidos as user_envia_apellidos',
+                        DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_enviar_para_aprobacion, '$.fecha_envia_para_aprobacion')) as fecha_envio_aprobacion"),
+                        'user_aprob.nombres as user_aprobacion_nombres',
+                        'user_aprob.apellidos as user_aprobacion_apellidos',
+                        DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_aprobacion, '$.fecha_aprobacion')) as fecha_aprobacion"),
+                        'user_rechazo.nombres as user_rechazo_nombres',
+                        'user_rechazo.apellidos as user_rechazo_apellidos',
+                        DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_rechazo, '$.fecha_rechazo')) as fecha_rechazo"),
+                        DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_rechazo, '$.comentario_rechazo')) as comentario_rechazo")
+                    )
+                    ->first();
+                    // Asignamos los valores al item
+                    $item->nombreInstitucion                = $padre ? $padre->nombreInstitucion : null;
+                    $item->usuario_asesor                   = $padre ? $padre->usuario_asesor : null;
+                    $item->fecha_envio_aprobacion           = $padre ? $padre->fecha_envio_aprobacion : null;
+                    $item->user_envia_nombres               = $padre ? $padre->user_envia_nombres : null;
+                    $item->user_envia_apellidos             = $padre ? $padre->user_envia_apellidos : null;
+                    $item->descripcion_periodoescolar       = $padre ? $padre->descripcion_periodoescolar : null;
+                    $item->id_asesor                        = $padre ? $padre->asesor_id : null;
+                }
+                if ($item->tipo == '7') {
+                    $padre = DB::TABLE('fichero_mercado as fm')
+                    ->where('fm.fm_id', $item->id_padre)
+                    ->where('ins.asesor_id', $request->idAsesor)
+                    ->leftJoin('institucion as ins', 'fm.idInstitucion', '=', 'ins.idInstitucion')
+                    ->leftJoin('usuario as us', 'ins.asesor_id', '=', 'us.idusuario')
+                    ->leftJoin('provincia as pro', 'ins.idprovincia', '=', 'pro.idprovincia')
+                    ->leftJoin('ciudad as ciu', 'ins.ciudad_id', '=', 'ciu.idciudad')
+                    ->leftJoin('parroquia as parr', 'ins.parr_id', '=', 'parr.parr_id')
+                    ->leftJoin('periodoescolar as pe', 'fm.idperiodoescolar', '=', 'pe.idperiodoescolar')
+                    // LEFT JOIN de usuarios creador y editor
+                    ->leftJoin('usuario as usercreated', 'fm.user_created', '=', 'usercreated.idusuario')
+                    ->leftJoin('usuario as user_edit', 'fm.user_edit', '=', 'user_edit.idusuario')
+                    // LEFT JOIN a usuarios desde JSON usando DB::raw
+                    ->leftJoin('usuario as user_envia', DB::raw('user_envia.idusuario'), '=', DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_enviar_para_aprobacion, '$.user_envia_para_aprobacion'))"))
+                    ->leftJoin('usuario as user_aprob', DB::raw('user_aprob.idusuario'), '=', DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_aprobacion, '$.user_aprobacion'))"))
+                    ->leftJoin('usuario as user_rechazo', DB::raw('user_rechazo.idusuario'), '=', DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_rechazo, '$.user_rechazo'))"))
+                    ->select(
+                        'ins.idInstitucion',
+                        'ins.nombreInstitucion',
+                        'ins.direccionInstitucion',
+                        'ins.idprovincia',
+                        'ins.asesor_id',
+                        'ins.ciudad_id',
+                        'ins.parr_id',
+                        'fm.fm_id',
+                        'fm.fm_estado',
+                        'fm.fm_observacion',
+                        'fm.created_at',
+                        'fm.updated_at',
+                        'fm.idperiodoescolar',
+                        'pe.descripcion as descripcion_periodoescolar',
+                        DB::raw("CONCAT(us.nombres, ' ', us.apellidos) as usuario_asesor"),
+                        'pro.nombreprovincia',
+                        'ciu.nombre as nombre_ciudad',
+                        'parr.parr_nombre',
+                        // Campos de usuario creador y editor
+                        'usercreated.nombres as usercreated_nombres',
+                        'usercreated.apellidos as usercreated_apellidos',
+                        'user_edit.nombres as user_edit_nombres',
+                        'user_edit.apellidos as user_edit_apellidos',
+                        // Campos de usuarios del JSON
+                        'user_envia.nombres as user_envia_nombres',
+                        'user_envia.apellidos as user_envia_apellidos',
+                        DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_enviar_para_aprobacion, '$.fecha_envia_para_aprobacion')) as fecha_envio_aprobacion"),
+                        'user_aprob.nombres as user_aprobacion_nombres',
+                        'user_aprob.apellidos as user_aprobacion_apellidos',
+                        DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_aprobacion, '$.fecha_aprobacion')) as fecha_aprobacion"),
+                        'user_rechazo.nombres as user_rechazo_nombres',
+                        'user_rechazo.apellidos as user_rechazo_apellidos',
+                        DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_rechazo, '$.fecha_rechazo')) as fecha_rechazo"),
+                        DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_rechazo, '$.comentario_rechazo')) as comentario_rechazo")
+                    )
+
+                    ->first();
+                    // quitar id_asesor en null
+                    // Asignamos los valores al item
+                    $item->nombreInstitucion                = $padre ? $padre->nombreInstitucion : null;
+                    $item->usuario_asesor                   = $padre ? $padre->usuario_asesor : null;
+                    $item->fecha_aprobacion                 = $padre ? $padre->fecha_aprobacion : null;
+                    $item->user_aprobacion_nombres          = $padre ? $padre->user_aprobacion_nombres : null;
+                    $item->user_aprobacion_apellidos        = $padre ? $padre->user_aprobacion_apellidos : null;
+                    $item->descripcion_periodoescolar       = $padre ? $padre->descripcion_periodoescolar : null;
+                    $item->id_asesor                        = $padre ? $padre->asesor_id : null;
+                }
+                if ($item->tipo == '8') {
+                    $padre = DB::TABLE('fichero_mercado as fm')
+                    ->where('fm.fm_id', $item->id_padre)
+                    ->where('ins.asesor_id', $request->idAsesor)
+                    ->leftJoin('institucion as ins', 'fm.idInstitucion', '=', 'ins.idInstitucion')
+                    ->leftJoin('usuario as us', 'ins.asesor_id', '=', 'us.idusuario')
+                    ->leftJoin('provincia as pro', 'ins.idprovincia', '=', 'pro.idprovincia')
+                    ->leftJoin('ciudad as ciu', 'ins.ciudad_id', '=', 'ciu.idciudad')
+                    ->leftJoin('parroquia as parr', 'ins.parr_id', '=', 'parr.parr_id')
+                    ->leftJoin('periodoescolar as pe', 'fm.idperiodoescolar', '=', 'pe.idperiodoescolar')
+                    // LEFT JOIN de usuarios creador y editor
+                    ->leftJoin('usuario as usercreated', 'fm.user_created', '=', 'usercreated.idusuario')
+                    ->leftJoin('usuario as user_edit', 'fm.user_edit', '=', 'user_edit.idusuario')
+                    // LEFT JOIN a usuarios desde JSON usando DB::raw
+                    ->leftJoin('usuario as user_envia', DB::raw('user_envia.idusuario'), '=', DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_enviar_para_aprobacion, '$.user_envia_para_aprobacion'))"))
+                    ->leftJoin('usuario as user_aprob', DB::raw('user_aprob.idusuario'), '=', DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_aprobacion, '$.user_aprobacion'))"))
+                    ->leftJoin('usuario as user_rechazo', DB::raw('user_rechazo.idusuario'), '=', DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_rechazo, '$.user_rechazo'))"))
+                    ->select(
+                        'ins.idInstitucion',
+                        'ins.nombreInstitucion',
+                        'ins.direccionInstitucion',
+                        'ins.idprovincia',
+                        'ins.asesor_id',
+                        'ins.ciudad_id',
+                        'ins.parr_id',
+                        'fm.fm_id',
+                        'fm.fm_estado',
+                        'fm.fm_observacion',
+                        'fm.created_at',
+                        'fm.updated_at',
+                        'fm.idperiodoescolar',
+                        'pe.descripcion as descripcion_periodoescolar',
+                        DB::raw("CONCAT(us.nombres, ' ', us.apellidos) as usuario_asesor"),
+                        'pro.nombreprovincia',
+                        'ciu.nombre as nombre_ciudad',
+                        'parr.parr_nombre',
+                        // Campos de usuario creador y editor
+                        'usercreated.nombres as usercreated_nombres',
+                        'usercreated.apellidos as usercreated_apellidos',
+                        'user_edit.nombres as user_edit_nombres',
+                        'user_edit.apellidos as user_edit_apellidos',
+                        // Campos de usuarios del JSON
+                        'user_envia.nombres as user_envia_nombres',
+                        'user_envia.apellidos as user_envia_apellidos',
+                        DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_enviar_para_aprobacion, '$.fecha_envia_para_aprobacion')) as fecha_envio_aprobacion"),
+                        'user_aprob.nombres as user_aprobacion_nombres',
+                        'user_aprob.apellidos as user_aprobacion_apellidos',
+                        DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_aprobacion, '$.fecha_aprobacion')) as fecha_aprobacion"),
+                        'user_rechazo.nombres as user_rechazo_nombres',
+                        'user_rechazo.apellidos as user_rechazo_apellidos',
+                        DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_rechazo, '$.fecha_rechazo')) as fecha_rechazo"),
+                        DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_rechazo, '$.comentario_rechazo')) as comentario_rechazo")
+                    )
+
+                    ->first();
+                    // Asignamos los valores al item
+                    $item->nombreInstitucion                = $padre ? $padre->nombreInstitucion : null;
+                    $item->usuario_asesor                   = $padre ? $padre->usuario_asesor : null;
+                    $item->fecha_rechazo                    = $padre ? $padre->fecha_rechazo : null;
+                    $item->user_rechazo_nombres             = $padre ? $padre->user_rechazo_nombres : null;
+                    $item->user_rechazo_apellidos           = $padre ? $padre->user_rechazo_apellidos : null;
+                    $item->descripcion_periodoescolar       = $padre ? $padre->descripcion_periodoescolar : null;
+                    $item->id_asesor                        = $padre ? $padre->asesor_id : null;
+                }
+                if ($item->tipo == '9') {
+                    $padre = DB::TABLE('fichero_mercado as fm')
+                    ->where('fm.fm_id', $item->id_padre)
+                    ->where('ins.asesor_id', $request->idAsesor)
+                    ->leftJoin('notificaciones_general as ng', 'fm.fm_id', '=', 'ng.id_padre')
+                    ->leftJoin('usuario as us_activa', 'ng.user_created', '=', 'us_activa.idusuario')
+                    ->leftJoin('institucion as ins', 'fm.idInstitucion', '=', 'ins.idInstitucion')
+                    ->leftJoin('usuario as us', 'ins.asesor_id', '=', 'us.idusuario')
+                    ->leftJoin('provincia as pro', 'ins.idprovincia', '=', 'pro.idprovincia')
+                    ->leftJoin('ciudad as ciu', 'ins.ciudad_id', '=', 'ciu.idciudad')
+                    ->leftJoin('parroquia as parr', 'ins.parr_id', '=', 'parr.parr_id')
+                    ->leftJoin('periodoescolar as pe', 'fm.idperiodoescolar', '=', 'pe.idperiodoescolar')
+                    // LEFT JOIN de usuarios creador y editor
+                    ->leftJoin('usuario as usercreated', 'fm.user_created', '=', 'usercreated.idusuario')
+                    ->leftJoin('usuario as user_edit', 'fm.user_edit', '=', 'user_edit.idusuario')
+                    // LEFT JOIN a usuarios desde JSON usando DB::raw
+                    ->leftJoin('usuario as user_envia', DB::raw('user_envia.idusuario'), '=', DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_enviar_para_aprobacion, '$.user_envia_para_aprobacion'))"))
+                    ->leftJoin('usuario as user_aprob', DB::raw('user_aprob.idusuario'), '=', DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_aprobacion, '$.user_aprobacion'))"))
+                    ->leftJoin('usuario as user_rechazo', DB::raw('user_rechazo.idusuario'), '=', DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_rechazo, '$.user_rechazo'))"))
+                    ->select(
+                        'ins.idInstitucion',
+                        'ins.nombreInstitucion',
+                        'ins.direccionInstitucion',
+                        'ins.idprovincia',
+                        'ins.asesor_id',
+                        'ins.ciudad_id',
+                        'ins.parr_id',
+                        'fm.fm_id',
+                        'fm.fm_estado',
+                        'fm.fm_observacion',
+                        'fm.created_at',
+                        'fm.updated_at',
+                        'fm.idperiodoescolar',
+                        'pe.descripcion as descripcion_periodoescolar',
+                        DB::raw("CONCAT(us_activa.nombres, ' ', us_activa.apellidos) as usuario_activa"),
+                        DB::raw("CONCAT(us.nombres, ' ', us.apellidos) as usuario_asesor"),
+                        'pro.nombreprovincia',
+                        'ciu.nombre as nombre_ciudad',
+                        'parr.parr_nombre',
+                        // Campos de usuario creador y editor
+                        'usercreated.nombres as usercreated_nombres',
+                        'usercreated.apellidos as usercreated_apellidos',
+                        'user_edit.nombres as user_edit_nombres',
+                        'user_edit.apellidos as user_edit_apellidos',
+                        // Campos de usuarios del JSON
+                        'user_envia.nombres as user_envia_nombres',
+                        'user_envia.apellidos as user_envia_apellidos',
+                        DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_enviar_para_aprobacion, '$.fecha_envia_para_aprobacion')) as fecha_envio_aprobacion"),
+                        'user_aprob.nombres as user_aprobacion_nombres',
+                        'user_aprob.apellidos as user_aprobacion_apellidos',
+                        DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_aprobacion, '$.fecha_aprobacion')) as fecha_aprobacion"),
+                        'user_rechazo.nombres as user_rechazo_nombres',
+                        'user_rechazo.apellidos as user_rechazo_apellidos',
+                        DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_rechazo, '$.fecha_rechazo')) as fecha_rechazo"),
+                        DB::raw("JSON_UNQUOTE(JSON_EXTRACT(fm.info_rechazo, '$.comentario_rechazo')) as comentario_rechazo")
+                    )
+
+                    ->first();
+                    // Asignamos los valores al item
+                    $item->nombreInstitucion                = $padre ? $padre->nombreInstitucion : null;
+                    $item->usuario_asesor                   = $padre ? $padre->usuario_asesor : null;
+                    $item->fecha_rechazo                    = $padre ? $padre->fecha_rechazo : null;
+                    $item->user_rechazo_nombres             = $padre ? $padre->user_rechazo_nombres : null;
+                    $item->user_rechazo_apellidos           = $padre ? $padre->user_rechazo_apellidos : null;
+                    $item->descripcion_periodoescolar       = $padre ? $padre->descripcion_periodoescolar : null;
+                    $item->usuario_activa                   = $padre ? $padre->usuario_activa : null;
+                    $item->id_asesor                        = $padre ? $padre->asesor_id : null;
+                }
                 return $item;
             })
             ->toArray(); // Convertimos el resultado a array
@@ -1347,7 +1613,32 @@ class VerificacionControllerAnterior extends Controller
             ->sortByDesc('fecha_solicita') // Ordenamos por fecha_solicita de forma descendente
             ->values()
             ->all(); // Convertimos de nuevo a array simple
+        // Excluir fichero de facturadores
+        if($id_group == 22 || $id_group == 23){
+          // Excluir los de tipo 6
+            $resultado = collect($resultado)
+                ->reject(function ($item) {
+                    return $item->tipo == 6;
+                })
+                ->values()
+                ->all();
+        }
 
+           $resultado = collect($resultado)
+            ->reject(function ($item) {
+                // Eliminar si tipo es 7 o 8 y además id_asesor es null
+                return in_array($item->tipo, [7, 8, 9]) && is_null($item->id_asesor);
+            })
+            ->values()
+            ->all();
+        // }else if ($id_group == 11){
+        //     $resultado = collect($resultado)
+        //         ->reject(function ($item) {
+        //             return $item->tipo == 7;
+        //         })
+        //         ->values()
+        //         ->all();
+        // }
         return response()->json($resultado);
     }
 
@@ -2473,6 +2764,9 @@ class VerificacionControllerAnterior extends Controller
                     'verificacion'              => $item->verificacion?? null,
                     'descuento'                 => $item->descuento?? null,
                     'porcentaje_personalizado_regalado' => $item->porcentaje_personalizado_regalado?? null,
+                    'idtipodoc'                 => $item->idtipodoc?? null,
+                    'codigo_proforma'           => $item->codigo_proforma?? null,
+                    'proforma_empresa'          => $item->proforma_empresa?? null,
                 ];
                 $contador++;
             }
@@ -2840,8 +3134,6 @@ class VerificacionControllerAnterior extends Controller
         // ];
     }
 
-    //api:get/metodosGetVerificaciones?getReporteSueltosContratosLiquidadoYNoLiquidados=1&id_periodo=23
-
 
     public function getReporteSueltosContratosLiquidadoYNoLiquidados($request){
         $id_periodo = $request->input("id_periodo", 0);
@@ -2851,13 +3143,17 @@ class VerificacionControllerAnterior extends Controller
         $contratos = DB::SELECT("
             SELECT
                 p.id_asesor,
+                p.tipo_venta_descr,
+                p.id_institucion,
                 CONCAT(u.nombres,' ',u.apellidos) AS nombre_asesor,
                 p.contrato_generado AS contrato,
                 COALESCE(SUM(c.cantidad_libro), 0) AS cantidad,
                 COALESCE(SUM(f.pfn_pvp * c.cantidad_libro), 0) AS total,
-                p.estadoPedido_Pagos as estadoPedido
+                p.estadoPedido_Pagos as estadoPedido,
+                ins.nombreInstitucion
             FROM pedidos p
             LEFT JOIN usuario u ON u.idusuario = p.id_asesor
+            LEFT JOIN institucion ins ON ins.idInstitucion = p.id_institucion
             LEFT JOIN (
                 SELECT
                     contrato,
@@ -2873,6 +3169,7 @@ class VerificacionControllerAnterior extends Controller
             ) c ON c.contrato = p.contrato_generado
             LEFT JOIN pedidos_formato_new f
                 ON f.idlibro = c.libro_idlibro
+
             AND f.idperiodoescolar = ?
             WHERE p.estado = '1'
             AND p.id_periodo = ?
@@ -2885,24 +3182,7 @@ class VerificacionControllerAnterior extends Controller
             $id_periodo      // para pedidos
         ]);
 
-        // 🔹 Traer SIN CONTRATO una sola vez
-        $sinContrato = DB::SELECTOne("
-            SELECT
-                'SIN CONTRATO' AS contrato,
-                COUNT(*) AS cantidad,
-                SUM(f.pfn_pvp) AS total
-            FROM codigoslibros c
-            LEFT JOIN pedidos_formato_new f
-                ON f.idlibro = c.libro_idlibro
-            AND f.idperiodoescolar = ?
-            WHERE (c.contrato IS NULL OR c.contrato = '' OR c.contrato = '0')
-            AND c.bc_periodo = ?
-            AND c.prueba_diagnostica = '0'
-            AND c.estado_liquidacion <> '3'
-        ", [
-            $periodoPrecio,
-            $id_periodo
-        ]);
+
 
         // 🔹 Agrupar contratos por asesor en un array de objetos
         $asesores = [];
@@ -2923,6 +3203,9 @@ class VerificacionControllerAnterior extends Controller
                     'nombre' => $row->nombre_asesor,
                     'contratos' => [
                         [
+                            'tipo_venta_descr' => $row->tipo_venta_descr,
+                            'nombreInstitucion' => $row->nombreInstitucion,
+                            'id_institucion' => $row->id_institucion,
                             'contrato' => $row->contrato,
                             'estadoPedido' => $row->estadoPedido,
                             'cantidad' => $row->cantidad,
@@ -2933,6 +3216,9 @@ class VerificacionControllerAnterior extends Controller
             } else {
                 // Ya existe, agregamos contrato al array
                 $asesores[$foundIndex]['contratos'][] = [
+                    'tipo_venta_descr' => $row->tipo_venta_descr,
+                    'nombreInstitucion' => $row->nombreInstitucion,
+                    'id_institucion' => $row->id_institucion,
                     'contrato' => $row->contrato,
                     'estadoPedido' => $row->estadoPedido,
                     'cantidad' => $row->cantidad,
@@ -2943,9 +3229,51 @@ class VerificacionControllerAnterior extends Controller
 
         return [
             'asesores' => $asesores,
-            'sin_contrato' => $sinContrato
         ];
     }
+
+
+    //api:get/metodosGetVerificaciones?getReporteSueltosContratosLiquidadoYNoLiquidados=1&id_periodo=24
+    // public function getReporteSueltosContratosLiquidadoYNoLiquidados($request){
+    //     $id_periodo = $request->input("id_periodo", 0);
+    //     if(!$id_periodo){
+    //         return ["status" => "0","message" => "Falta el id_periodo"];
+    //     }
+    //     $asesores   = DB::SELECT("SELECT DISTINCT
+    //             p.id_asesor,
+    //         CONCAT(u.nombres, ' ', u.apellidos) AS asesor
+    //         FROM pedidos p
+    //         LEFT JOIN usuario u ON u.idusuario = p.id_asesor
+    //         WHERE p.id_periodo = ?
+    //         AND p.estado = '1'
+    //         AND p.contrato_generado IS NOT NULL
+    //         ORDER BY asesor;
+    //     ", [$id_periodo]);
+    //     // traer contratos del asesor
+    //     foreach($asesores as $key => $item){
+    //         $id_asesor = $item->id_asesor;
+    //         $getContratos = DB::SELECT("SELECT
+    //             p.estadoPedido_Pagos,
+    //             p.id_asesor,
+    //             CONCAT(u.nombres, ' ', u.apellidos) AS asesor,
+    //             p.contrato_generado,
+    //             p.TotalVentaReal AS ventaBruta,
+    //             p.descuento AS comision,
+    //             ROUND(p.TotalVentaReal - ((p.TotalVentaReal * p.descuento)/100), 2) AS ven_neta
+    //         FROM pedidos p
+    //         LEFT JOIN usuario u ON u.idusuario = p.id_asesor
+    //         WHERE p.id_periodo = ?
+    //         AND p.estado = '1'
+    //         AND p.contrato_generado IS NOT NULL
+    //         AND p.id_asesor = ?
+    //         ORDER BY asesor;
+    //         ", [$id_periodo, $id_asesor]);
+
+    //         $item->contratos = $getContratos;
+    //         }
+    //     return $asesores;
+    //     }
+
     //api:get/metodosGetVerificaciones?getReporteCodigosGeneral=1&id_periodo=25&normales=0
     public function getReporteCodigosGeneral($request)
     {

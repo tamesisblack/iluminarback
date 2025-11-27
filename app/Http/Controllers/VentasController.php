@@ -1706,6 +1706,9 @@ class VentasController extends Controller
                     $venta->ven_fecha = $request->ven_fecha;
                     $venta->user_created = $request->user_created;
                     $venta->updated_at = now();
+                    // Agregar campos de facturación cruzada
+                    $venta->factura_cruzada = $request->factura_cruzada ?? 0;
+                    $venta->empresa_cruzada = $request->empresa_cruzada;
                     $venta->save();
 
                     // Actualizar secuencial solo si la venta se guardó exitosamente
@@ -1851,6 +1854,30 @@ class VentasController extends Controller
         // Devuelve las ventas con los datos combinados
         return response()->json($ventas);
     }
+
+
+    public function getAllPrefacturasXCliente(Request $request) {
+        $ventas = DB::table('f_venta as fv')
+            ->join('empresas as e', 'fv.id_empresa', '=', 'e.id')
+            ->join('periodoescolar as p', 'fv.periodo_id', '=', 'p.idperiodoescolar')
+            ->join('usuario as u', 'u.cedula', '=', 'fv.ruc_cliente')
+            ->join('institucion as i', 'fv.institucion_id', '=','i.idInstitucion')
+            ->select(
+                'fv.*',
+                DB::raw("concat(u.nombres, ' ', u.apellidos) as clienteUsuario"),
+                'i.nombreInstitucion as clienteInstitucion',
+                'e.descripcion_corta',
+                'p.periodoescolar'
+            )
+            ->where('fv.ruc_cliente', $request->busqueda)
+            ->where('fv.periodo_id', $request->periodo)
+            ->where('fv.idtipodoc', 1)
+            ->where('fv.est_ven_codigo', '<>', 3)
+            ->get();
+
+        return response()->json($ventas);
+    }
+
     public function getAllPrefacturasNotas(Request $request) {
         $ventas = DB::table('f_venta as fv')
             ->join('empresas as e', 'fv.id_empresa', '=', 'e.id')
@@ -1916,9 +1943,50 @@ class VentasController extends Controller
         // Devolver los resultados
         return response()->json($resultados);
     }
+
+    public function getCantidadFacturadaXcliente(Request $request)
+    {
+        // Validar los parámetros de entrada
+        $request->validate([
+            'cedula' => 'required',
+            'empresa' => 'required|integer',
+            'periodo' => 'required|integer',
+        ]);
+
+        $empresa = $request->empresa;
+
+        $resultados = DB::table('f_venta_agrupado as fva')
+            ->join('f_detalle_venta_agrupado as fdva', 'fva.id_factura', '=', 'fdva.id_factura')
+            ->join('usuario as u', 'u.idusuario', '=', 'fva.ven_cliente')
+            ->select('fdva.pro_codigo', DB::raw('SUM(fdva.det_ven_cantidad) as det_ven_cantidad'))
+            ->where('u.cedula', $request->cedula)
+            ->where('fva.periodo_id', $request->periodo)
+            ->where('fva.est_ven_codigo', 0)
+            ->where(function ($q) use ($empresa) {
+                $q->where(function ($sub) use ($empresa) {
+                    // Facturas de la empresa actual que NO son cruzadas
+                    $sub->where('fva.id_empresa', $empresa)
+                        ->where(function ($s) {
+                            $s->whereNull('fva.factura_cruzada')
+                            ->orWhere('fva.factura_cruzada', 0);
+                        });
+                })
+                ->orWhere(function ($sub) use ($empresa) {
+                    // Facturas de otras empresas cruzadas hacia la actual
+                    $sub->where('fva.factura_cruzada', 1)
+                        ->where('fva.empresa_cruzada', $empresa);
+                });
+            })
+            ->groupBy('fdva.pro_codigo')
+            ->get();
+
+        // Devolver los resultados
+        return response()->json($resultados);
+    }
+
     public function Get_PREFactura(Request $request){
         $query = DB::SELECT("SELECT dv.det_ven_codigo, dv.pro_codigo, dv.det_ven_dev, dv.det_ven_cantidad , dv.det_ven_valor_u,
-        l.descripcionlibro, ls.nombre, s.nombre_serie, ls.id_serie, a.area_idarea, ls.year, fv.periodo_id, l.idlibro FROM f_detalle_venta as dv
+        l.descripcionlibro, ls.nombre, s.nombre_serie, ls.id_serie, a.area_idarea, ls.year, fv.periodo_id, l.idlibro,fv.ven_desc_por FROM f_detalle_venta as dv
         INNER JOIN f_venta as fv ON dv.ven_codigo=fv.ven_codigo
         INNER JOIN libros_series as ls ON dv.pro_codigo=ls.codigo_liquidacion
         INNER JOIN series as s ON ls.id_serie=s.id_serie
@@ -2041,10 +2109,133 @@ class VentasController extends Controller
 
     //api:get/metodosGetVentas
     public function metodosGetVentas(Request $request){
-        if($request->getMovimientosNotas)    { return $this->getMovimientosNotas($request); }
-        if($request->getProductoDetalleVenta)   { return $this->getProductoDetalleVenta($request); }
-        if($request->reporteDocumentosVentaGeneral) { return $this->reporteDocumentosVentaGeneral($request); }
-        if($request->getReporteContratosPagos) { return $this->getReporteContratosPagos($request); }
+        if($request->getMovimientosNotas)               { return $this->getMovimientosNotas($request); }
+        if($request->getProductoDetalleVenta)           { return $this->getProductoDetalleVenta($request); }
+        if($request->reporteDocumentosVentaGeneral)     { return $this->reporteDocumentosVentaGeneral($request); }
+        if($request->reporteGeneralAnual)               { return $this->reporteGeneralAnual($request); }
+        if($request->getReporteContratosPagos)          { return $this->getReporteContratosPagos($request); }
+        if($request->GetReportePedidosPagos)            { return $this->GetReportePedidosPagos($request); }
+        if($request->GetReportePorLibro)                { return $this->GetReportePorLibro($request); }
+        if($request->getReportePedidoPorFechas)         { return $this->getReportePedidoPorFechas($request); }
+        if($request->getDespachosDocumentosVentas)      { return $this->getDespachosDocumentosVentas($request); }
+    }
+
+    //api:get/metodosGetVentas?GetReportePedidosPagos=1&periodo=25
+    public function GetReportePedidosPagos(Request $request){
+        $periodo = $request->input('periodo');
+        $tipoVenta = $request->input('tipoVenta','3'); //1 => directa; 2 => lista; 3 => todas
+        if (!$periodo) {
+            return response()->json(['status' => '0', 'message' => 'Faltan parámetros'], 200);
+        }
+        $condicion = "";
+        if($tipoVenta == 3){
+
+        }else{
+            // si trae valores a incluir
+            $condicion = "AND (
+                p.tipo_venta = $tipoVenta
+            )";
+        }
+
+       $query = DB::SELECT("SELECT
+
+            p.id_institucion,
+            p.tipo_venta_descr,
+            p.id_pedido,
+            CONCAT(u.nombres,' ', u.apellidos) AS asesor,
+            i.nombreInstitucion,
+            i.ruc,
+            CASE
+                WHEN i.punto_venta = 1 THEN 'SI'
+                ELSE 'NO'
+            END AS punto_venta,
+            p.contrato_generado,
+            p.total_venta AS ventaPedido,
+            IFNULL((
+                SELECT SUM(a.venta_bruta)
+                FROM pedidos_alcance a
+                WHERE a.estado_alcance = 1
+                AND a.id_pedido = p.id_pedido
+            ), 0) AS ventaAlcance,
+            (p.total_venta + IFNULL((
+                SELECT SUM(a.venta_bruta)
+                FROM pedidos_alcance a
+                WHERE a.estado_alcance = 1
+                AND a.id_pedido = p.id_pedido
+            ), 0)) AS ventaBruta,
+            p.descuento AS comision,
+            ROUND(
+                IFNULL((
+                    SELECT SUM(l.doc_valor)
+                    FROM `1_4_documento_liq` l
+                    WHERE l.periodo_id = '$periodo'
+                    AND l.estado = '1'
+                    AND l.tipo_pago_id IN (1,2,7)
+                    AND l.id_pedido = p.id_pedido
+                ),0), 2
+            ) AS totalPagos,
+            (
+                SELECT IFNULL(SUM(pcd.valor), 0)
+                FROM pedidos_pagos_detalles pcd
+                LEFT JOIN 1_4_documento_liq l ON l.doc_codigo = pcd.id_pago
+                LEFT JOIN pedidos_formas_pago fp ON fp.tip_pag_codigo = l.forma_pago_id
+                LEFT JOIN pedidos p2 ON p2.id_pedido = l.id_pedido
+                LEFT JOIN pedidos_convenios pc ON pc.id_pedido = p2.id_pedido
+                WHERE l.tipo_pago_id = 4
+                AND l.periodo_id = '$periodo'
+                AND l.estado = '1'
+                AND l.id_pedido = p.id_pedido
+                AND p2.estado = '1'
+                AND p2.tipo = '0'
+                AND p2.id_periodo = '$periodo'
+                AND pc.periodo_id = '$periodo'
+                AND pc.estado <> '2'
+            ) AS totalConvenioAprobado
+            FROM pedidos p
+            LEFT JOIN institucion i ON i.idInstitucion = p.id_institucion
+            LEFT JOIN usuario u ON u.idusuario = p.id_asesor
+            WHERE p.id_periodo = '$periodo'
+            AND p.estado = '1'
+            AND p.tipo = '0'
+            AND p.contrato_generado IS NOT NULL
+            $condicion
+            ORDER BY i.nombreInstitucion ASC
+        ");
+
+        foreach ($query as $q) {
+            // Calcular porcentaje de comisión
+            $q->valorComision = round(($q->ventaBruta * $q->comision) / 100, 2);
+            // Calcular venta neta (ventaBruta - porcentaje descuento)
+            $q->ven_neta = round($q->ventaBruta - (($q->ventaBruta * $q->comision) / 100), 2);
+
+            // Crear propiedad totalPagosConvenio
+            $q->totalPagosConvenio = $q->totalPagos + $q->totalConvenioAprobado;
+
+            // Agregamos la propiedad calculada sin modificar la consulta SQL
+            $q->xPagar = $q->valorComision - $q->totalPagosConvenio;
+
+            // validar si es distruidor  // 0no es distribuidor 1 si es distribuidor
+            $if_distribuidor = 0;
+            $getDistribuidor = DB::SELECT("SELECT * FROM f_formulario_proforma fcp
+            WHERE fcp.idInstitucion = '$q->id_institucion'
+            AND fcp.idperiodoescolar = '$periodo'
+            AND fcp.ffp_estado = '1'
+            ");
+            if($getDistribuidor){
+                $if_distribuidor = $getDistribuidor[0]->if_distribuidor;
+            }
+            $q->if_distribuidor = $if_distribuidor; // Asignar el valor a la propiedad
+            $q->EsDistribuidor = $if_distribuidor == 1 ? 'SI' : 'NO';
+            // traer los beneficiarios
+            $getBeneficiarios = DB::SELECT("SELECT CONCAT(u.nombres,' ',u.apellidos) AS beneficiario, u.cedula
+            FROM pedidos_beneficiarios b
+            LEFT JOIN usuario u ON u.idusuario = b.id_usuario
+            WHERE b.id_pedido ='$q->id_pedido'
+            ");
+            $q->beneficiarios = $getBeneficiarios;
+        }
+
+        return $query;
     }
     //api:get/metodosGetVentas?getMovimientosNotas=1
     public function getMovimientosNotas($request){
@@ -2063,6 +2254,380 @@ class VentasController extends Controller
             )
             ->get();
         return $f_venta_historico_notas_cambiadas;
+    }
+
+//api:get/metodosGetVentas?getReporteContratosPagos=1&periodo=25&tipoInstitucionIncluir=6,5,4,3,2,1
+    public function getReporteContratosPagos(Request $request){
+
+        $periodo = $request->input('periodo');
+        $tipoInstitucionIncluir = $request->tipoInstitucionIncluir;
+        if (!$periodo) {
+            return response()->json(['status' => '0', 'message' => 'Faltan parámetros'], 200);
+        }
+        if (!empty($tipoInstitucionIncluir)) {
+            // si trae valores a incluir
+            $condicionTipoInstitucion = "AND i.tipo_institucion IN ($tipoInstitucionIncluir)";
+        }
+        $query = DB::SELECT("SELECT
+                p.id_institucion,
+                p.id_pedido,
+                p.tipo_venta_descr,
+                CONCAT(u.nombres,' ', u.apellidos) AS asesor,
+                i.nombreInstitucion,
+                CASE
+                    WHEN i.punto_venta = 1 THEN 'SI'
+                    ELSE 'NO'
+                END AS punto_venta,
+                p.contrato_generado,
+                p.TotalVentaReal AS ventaBruta,
+                p.descuento AS comision,
+                ROUND(p.TotalVentaReal - ((p.TotalVentaReal * p.descuento)/100), 2) AS ven_neta,
+                ROUND(
+                    IFNULL((
+                        SELECT SUM(l.doc_valor)
+                        FROM `1_4_documento_liq` l
+                        WHERE l.periodo_id = '$periodo'
+                        AND l.estado = '1'
+                        AND l.tipo_pago_id IN (1,2,7)
+                        AND l.id_pedido = p.id_pedido
+                    ),0), 2
+                ) AS totalPagos,
+                (
+                    SELECT IFNULL(SUM(pcd.valor), 0)
+                    FROM pedidos_pagos_detalles pcd
+                    LEFT JOIN 1_4_documento_liq l ON l.doc_codigo = pcd.id_pago
+                    LEFT JOIN pedidos_formas_pago fp ON fp.tip_pag_codigo = l.forma_pago_id
+                    LEFT JOIN pedidos p2 ON p2.id_pedido = l.id_pedido
+                    LEFT JOIN pedidos_convenios pc ON pc.id_pedido = p2.id_pedido
+                    WHERE l.tipo_pago_id = 4
+                    AND l.periodo_id = '$periodo'
+                    AND l.estado = '1'
+                    AND l.id_pedido = p.id_pedido
+                    AND p2.estado = '1'
+                    AND p2.tipo = '0'
+                    AND p2.id_periodo = '$periodo'
+                    AND pc.periodo_id = '$periodo'
+                    AND pc.estado <> '2'
+                ) AS totalConvenioAprobado
+            FROM pedidos p
+            LEFT JOIN institucion i ON i.idInstitucion = p.id_institucion
+            LEFT JOIN usuario u ON u.idusuario = p.id_asesor
+            WHERE p.id_periodo = '$periodo'
+            AND p.estado = '1'
+            AND p.tipo = '0'
+            $condicionTipoInstitucion
+            AND p.contrato_generado IS NOT NULL
+            ORDER BY i.nombreInstitucion ASC
+        ");
+        foreach ($query as $q) {
+            // Calcular porcentaje de comisión
+            $q->valorComision = round(($q->ventaBruta * $q->comision) / 100, 2);
+            // Calcular venta neta (ventaBr
+            // Crear propiedad totalPagosConvenio
+            $q->totalPagosConvenio = $q->totalPagos + $q->totalConvenioAprobado;
+            // Agregamos la propiedad calculada sin modificar la consulta SQL
+            $q->xPagar = $q->valorComision - $q->totalPagosConvenio;
+            // validar si es distruidor  // 0no es distribuidor 1 si es distribuidor
+            $if_distribuidor = 0;
+            $getDistribuidor = DB::SELECT("SELECT * FROM f_formulario_proforma fcp
+            WHERE fcp.idInstitucion = '$q->id_institucion'
+            AND fcp.idperiodoescolar = '$periodo'
+            AND fcp.ffp_estado = '1'
+            ");
+            if($getDistribuidor){
+                $if_distribuidor = $getDistribuidor[0]->if_distribuidor;
+
+            }
+            $q->if_distribuidor = $if_distribuidor; // Asignar el valor a la propiedad
+            $q->EsDistribuidor = $if_distribuidor == 1 ? 'SI' : 'NO';
+        }
+        return $query;
+    }
+    /*
+
+        Pedidos + Alcances:
+
+        Se suman cantidades y valores por codigo_liquidacion | nombrelibro | nombre_serie.
+
+        Resultado almacenado en $mergedPedidos.
+
+        Facturado:
+
+        Se fusiona con $mergedPedidos → si existe la clave, se agregan cantidad_facturada y documentoVenta.
+
+        Si no existe, se agrega un nuevo registro con pedidos en 0.
+
+        Despacho Bodega:
+
+        Se obtiene según tipoVenta.
+
+        Se fusiona con el array final → si existe la clave, se agregan cantidad_despachada y despachado.
+
+        Si solo existe en despachado → todos los valores de pedidos y facturado se ponen en 0.
+
+        Ordenamiento final por nombrelibro.
+     *
+    */
+    //api:get/metodosGetVentas?GetReportePorLibro=1&periodo=27&tipoVenta=3&tipoInstitucionIncluir=6,5,4,3,2,1
+    public function GetReportePorLibro(Request $request){
+        $periodo = $request->input('periodo');
+        $tipoInstitucionIncluir = $request->tipoInstitucionIncluir;
+        $tipoVenta = $request->tipoVenta;
+
+        if (!$periodo) {
+            return response()->json(['status' => '0', 'message' => 'Faltan parámetros'], 200);
+        }
+
+        // Si el periodo es menor o igual al configurado -> usa pedidos viejos
+        $nuevo = ($periodo <= $this->tr_periodoPedido) ? 0 : 1;
+        if($nuevo == 0){
+            $getPedidos = $this->pedidosRepository->pedidosAnteriorXLibroSinAlcances($periodo);
+            $getAlcances = $this->pedidosRepository->alcancesAnteriorXlibros($periodo);
+        }else{
+            $getPedidos = $this->pedidosRepository->pedidosNuevoXLibroSinAlcances($periodo);
+            $getAlcances = $this->pedidosRepository->alcancesNuevoXlibros($periodo);
+        }
+        // --- fusionar pedidos + alcances ---
+        $mergedPedidos = [];
+        foreach (array_merge($getPedidos, $getAlcances) as $row) {
+            $key = $row->codigo_liquidacion . '|' . $row->nombrelibro . '|' . $row->nombre_serie;
+            if (!isset($mergedPedidos[$key])) {
+                $mergedPedidos[$key] = [
+                    "codigo_liquidacion" => $row->codigo_liquidacion,
+                    "nombrelibro" => $row->nombrelibro,
+                    "nombre_serie" => $row->nombre_serie,
+                    "precio" => number_format((float)$row->precio, 2, '.', ''),
+                    "total_cantidadPedido" => (int)$row->total_cantidad,
+                    "pedido" => number_format((float)$row->pedido, 2, '.', ''),
+                ];
+            } else {
+                $mergedPedidos[$key]["total_cantidadPedido"] += (int)$row->total_cantidad;
+                $mergedPedidos[$key]["pedido"] = number_format(
+                    (float)$mergedPedidos[$key]["pedido"] + (float)$row->pedido,
+                    2, '.', ''
+                );
+            }
+        }
+
+        // --- facturado ---
+        $getFacturado = DB::SELECT("SELECT
+
+                l.idlibro,
+                COALESCE(ls.codigo_liquidacion, fdv.pro_codigo) AS codigo_liquidacion,
+                COALESCE(l.nombrelibro, 'SIN_NOMBRELIBRO') AS nombrelibro,
+                COALESCE(s.nombre_serie, 'SIN_NOMBRE_SERIE') AS nombre_serie,
+                fdv.det_ven_valor_u AS precio,
+                SUM(fdv.det_ven_cantidad - fdv.det_ven_dev) AS cantidad_facturada,
+                SUM((fdv.det_ven_cantidad - fdv.det_ven_dev) * fdv.det_ven_valor_u) AS documentoVenta
+            FROM f_detalle_venta fdv
+            LEFT JOIN f_venta fv
+                ON fv.ven_codigo = fdv.ven_codigo
+                AND fv.id_empresa = fdv.id_empresa
+            LEFT JOIN libros_series ls
+                ON ls.codigo_liquidacion = fdv.pro_codigo
+            LEFT JOIN libro l
+                ON l.idlibro = ls.idLibro
+            LEFT JOIN series s
+                ON s.id_serie = ls.id_serie
+            WHERE fv.periodo_id = '$periodo'
+            AND fv.idtipodoc IN (1, 3, 4)
+            AND fv.est_ven_codigo <> 3
+            GROUP BY
+                l.idlibro,
+                COALESCE(ls.codigo_liquidacion, fdv.pro_codigo),
+                COALESCE(l.nombrelibro, 'SIN_NOMBRELIBRO'),
+                COALESCE(s.nombre_serie, 'SIN_NOMBRE_SERIE'),
+                fdv.det_ven_valor_u
+            ORDER BY
+                nombrelibro;
+
+        ");
+        // --- fusionar pedidos+alcances con facturado ---
+        $final = [];
+
+        foreach ($mergedPedidos as $row) {
+            $key = $row["codigo_liquidacion"] . '|' . $row["nombrelibro"] . '|' . $row["nombre_serie"];
+            $final[$key] = [
+                "codigo_liquidacion" => $row["codigo_liquidacion"],
+                "nombrelibro" => $row["nombrelibro"],
+                "nombre_serie" => $row["nombre_serie"],
+                "precio" => $row["precio"],
+                "total_cantidadPedido" => $row["total_cantidadPedido"],
+                "pedido" => $row["pedido"],
+                "cantidad_facturada" => 0,
+                "documentoVenta" => "0.00",
+                "cantidad_despachada" => 0,
+                "despachoBodega" => "0.00"
+            ];
+        }
+
+        foreach ($getFacturado as $row) {
+            $key = $row->codigo_liquidacion . '|' . $row->nombrelibro . '|' . $row->nombre_serie;
+            if (isset($final[$key])) {
+                $final[$key]["cantidad_facturada"] = (int)$row->cantidad_facturada;
+                $final[$key]["documentoVenta"] = number_format((float)$row->documentoVenta, 2, '.', '');
+            } else {
+                $final[$key] = [
+                    "codigo_liquidacion" => $row->codigo_liquidacion,
+                    "nombrelibro" => $row->nombrelibro,
+                    "nombre_serie" => $row->nombre_serie,
+                    "precio" => number_format((float)$row->precio, 2, '.', ''),
+                    "total_cantidadPedido" => 0,
+                    "pedido" => "0.00",
+                    "cantidad_facturada" => (int)$row->cantidad_facturada,
+                    "documentoVenta" => number_format((float)$row->documentoVenta, 2, '.', ''),
+                    "cantidad_despachada" => 0,
+                    "despachoBodega" => "0.00"
+                ];
+            }
+        }
+
+        // --- despacho bodega ---
+        $arrayDespachoBodega = [];
+        if($tipoVenta == 1){
+            $arrayDespachoBodega = $this->ventasRepository->getDespachoBodegaDirecta($periodo, $tipoInstitucionIncluir);
+        }
+        if($tipoVenta == 2){
+            $arrayDespachoBodega = $this->ventasRepository->getDespachoBodegaLista($periodo, $tipoInstitucionIncluir);
+        }
+        if($tipoVenta == 3){
+            $arrayDespachoBodega = $this->ventasRepository->getDespachoBodegaTodo($periodo, $tipoInstitucionIncluir);
+        }
+        foreach ($arrayDespachoBodega as $row) {
+            // Asegúrate de tratar objetos
+            $codigo = is_object($row) ? $row->codigo_liquidacion : $row['codigo_liquidacion'];
+            $nombre = is_object($row) ? $row->nombrelibro : $row['nombrelibro'];
+            $serie  = is_object($row) ? $row->nombre_serie : $row['nombre_serie'];
+            $cantidadDespachada = is_object($row) ? $row->cantidad_despachada : $row['cantidad_despachada'];
+            $despachoBodega = is_object($row) ? $row->despachoBodega : $row['despachoBodega'];
+            $precio = is_object($row) ? $row->precio : $row['precio'];
+
+            $key = $codigo . '|' . $nombre . '|' . $serie;
+            if (isset($final[$key])) {
+                $final[$key]["cantidad_despachada"] = (int)$cantidadDespachada;
+                $final[$key]["despachoBodega"] = number_format((float)$despachoBodega, 2, '.', '');
+            } else {
+                $final[$key] = [
+                    "codigo_liquidacion" => $codigo,
+                    "nombrelibro" => $nombre,
+                    "nombre_serie" => $serie,
+                    "precio" => number_format((float)$precio, 2, '.', ''),
+                    "total_cantidadPedido" => 0,
+                    "pedido" => "0.00",
+                    "cantidad_facturada" => 0,
+                    "documentoVenta" => "0.00",
+                    "cantidad_despachada" => (int)$cantidadDespachada,
+                    "despachoBodega" => number_format((float)$despachoBodega, 2, '.', '')
+                ];
+            }
+        }
+
+        // --- ordenar por nombrelibro ---
+        $final = array_values($final);
+        usort($final, function ($a, $b) {
+            return strcmp($a["nombrelibro"], $b["nombrelibro"]);
+        });
+
+        return $final;
+    }
+
+    //api:get/metodosGetVentas?getReportePedidoPorFechas=1&fechaInicio=2022-01-01&fechaFin=2025-10-31&periodo=26
+    public function getReportePedidoPorFechas(Request $request)
+    {
+        $id_periodo = $request->input('periodo');
+        $fechaInicio = $request->input('fechaInicio');
+        $fechaFin = $request->input('fechaFin');
+
+        if (!$id_periodo || !$fechaInicio || !$fechaFin) {
+            return response()->json(['status' => '0', 'message' => 'Faltan parámetros'], 200);
+        }
+
+        $nuevo = ($id_periodo <= $this->tr_periodoPedido) ? 0 : 1;
+        $getPedidos = [];
+
+        if ($nuevo == 0) {
+            $getPedidos = $this->pedidosRepository->pedidosPorFechasAnterior($fechaInicio, $fechaFin, $id_periodo);
+        } else {
+            $getPedidos = $this->pedidosRepository->pedidosPorFechasNuevo($fechaInicio, $fechaFin, $id_periodo);
+        }
+
+        // 🔹 Convertimos a colección y agrupamos por pro_codigo
+        $pedidos = collect($getPedidos)
+            ->groupBy('pro_codigo')
+            ->map(function ($items) {
+                $primero = $items->first();
+                $totalCantidad = $items->sum('cantidad');
+
+                return (object) [
+                    'pro_codigo' => $primero->pro_codigo,
+                    'nombre_libro' => $primero->nombre_libro,
+                    'precio' => $primero->precio,
+                    'cantidad' => $totalCantidad,
+                    'idlibro' => $primero->idlibro,
+                ];
+            })
+            ->values()
+            ->toArray();
+        // multiplicamos precio * cantidad y formateamos
+        foreach ($pedidos as $key => $item) {
+            $total = $item->precio * $item->cantidad;
+            $pedidos[$key]->total = number_format((float)$total, 2, '.', '');
+        }
+        return response()->json($pedidos, 200);
+    }
+
+    //api:get/metodosGetVentas?getDespachosDocumentosVentas=1&periodo=27
+    public function getDespachosDocumentosVentas(Request $request){
+        $periodo = $request->input('periodo');
+        if (!$periodo) {
+            return response()->json(['status' => '0', 'message' => 'Faltan parámetros'], 200);
+        }
+        $query = DB::SELECT("SELECT
+                SUM(precio) AS total_precio,
+                SUM(valor_neto) AS total_valor_neto
+            FROM (
+                SELECT
+                    CASE
+                        WHEN c.estado_liquidacion = 2 THEN 0
+                        WHEN c.plus = 1 THEN 29.90
+                        ELSE fp.pfn_pvp
+                    END AS precio,
+                    CASE
+                        WHEN
+                            (CASE
+                                WHEN c.estado_liquidacion = 2 THEN 0
+                                WHEN c.plus = 1 THEN 29.90
+                                ELSE fp.pfn_pvp
+                            END) = 0
+                        THEN 0
+                        ELSE
+                            (CASE
+                                WHEN c.estado_liquidacion = 2 THEN 0
+                                WHEN c.plus = 1 THEN 29.90
+                                ELSE fp.pfn_pvp
+                            END) - (
+                                (CASE
+                                    WHEN c.estado_liquidacion = 2 THEN 0
+                                    WHEN c.plus = 1 THEN 29.90
+                                    ELSE fp.pfn_pvp
+                                END) * (v.ven_desc_por / 100)
+                            )
+                    END AS valor_neto
+                FROM codigoslibros c
+                LEFT JOIN pedidos_formato_new fp
+                    ON fp.idlibro = c.libro_idlibro
+                AND fp.idperiodoescolar = '$periodo'
+                LEFT JOIN f_venta v
+                    ON v.ven_codigo = c.codigo_proforma
+                AND v.id_empresa = c.proforma_empresa
+                WHERE c.bc_periodo = '$periodo'
+                AND c.estado_liquidacion IN (0,1,2)
+                AND c.codigo_proforma IS NOT NULL
+                AND (c.combo IS NULL OR  c.codigo_combo IS null)
+                AND c.prueba_diagnostica = '0'
+            ) AS sub;
+        ");
+        return $query;
     }
 
     //api:get/metodosGetVentas?getComboDetalleVenta=1&id_empresa=1&ven_codigo=PF-S24-FR-0000192
@@ -2145,143 +2710,214 @@ class VentasController extends Controller
         return $query;
     }
 
-    //api:get/metodosGetVentas?getReporteContratosPagos=1&periodo=25
-    public function getReporteContratosPagos(Request $request){
+  public function reporteGeneralAnual(Request $request)
+    {
         $periodo = $request->input('periodo');
         if (!$periodo) {
             return response()->json(['status' => '0', 'message' => 'Faltan parámetros'], 200);
         }
-    //     $query = DB::SELECT("
-    //     SELECT
-    //         p.id_institucion,
-    //         CONCAT(u.nombres,' ', u.apellidos) AS asesor,
-    //         i.nombreInstitucion,
-    //         p.contrato_generado,
-    //         p.TotalVentaReal AS ventaBruta,
-    //         p.descuento AS comision,
-    //         ROUND(p.TotalVentaReal - ((p.TotalVentaReal * p.descuento)/100), 2) AS ven_neta,
-    //         ROUND(
-    //             IFNULL((
-    //                 SELECT SUM(l.doc_valor)
-    //                 FROM `1_4_documento_liq` l
-    //                 WHERE l.periodo_id = '$periodo'
-    //                 AND l.estado = '1'
-    //                 AND l.tipo_pago_id IN (1,2,4,7)
-    //                 AND l.id_pedido = p.id_pedido
-    //             ),0), 2
-    //         ) AS totalPagos,
-    //         ROUND(
-    //             (p.TotalVentaReal - ((p.TotalVentaReal * p.descuento)/100)) -
-    //             IFNULL((
-    //                 SELECT SUM(l.doc_valor)
-    //                 FROM `1_4_documento_liq` l
-    //                 WHERE l.periodo_id = '$periodo'
-    //                 AND l.estado = '1'
-    //                 AND l.tipo_pago_id IN (1,2,4,7)
-    //                 AND l.id_pedido = p.id_pedido
-    //             ),0), 2
-    //         ) AS xPagar
-    //     FROM pedidos p
-    //     LEFT JOIN institucion i ON i.idInstitucion = p.id_institucion
-    //     LEFT JOIN usuario u ON u.idusuario = p.id_asesor
-    //     WHERE p.id_periodo = '$periodo'
-    //     AND p.estado = '1'
-    //     AND p.TotalVentaReal > 0
-    //     ORDER BY i.nombreInstitucion ASC
-    // ");
-    // return $query;
-        //  $query = DB::SELECT("SELECT
-        //         p.id_institucion,
-        //         p.id_pedido,
-        //         CONCAT(u.nombres,' ', u.apellidos) AS asesor,
-        //         i.nombreInstitucion,
-        //         p.contrato_generado,
-        //         p.TotalVentaReal AS ventaBruta,
-        //         p.descuento AS comision,
-        //         ROUND(p.TotalVentaReal - ((p.TotalVentaReal * p.descuento)/100), 2) AS ven_neta,
-        //         ROUND(
-        //             IFNULL((
-        //                 SELECT SUM(l.doc_valor)
-        //                 FROM `1_4_documento_liq` l
-        //                 WHERE l.periodo_id = '$periodo'
-        //                 AND l.estado = '1'
-        //                 AND l.tipo_pago_id IN (1,2,7)
-        //                 AND l.id_pedido = p.id_pedido
-        //             ),0), 2
-        //         ) AS totalPagos,
-        //        (
-        //             SELECT IFNULL(SUM(pcd.valor), 0)
-        //             FROM pedidos_pagos_detalles pcd
-        //             LEFT JOIN 1_4_documento_liq l ON l.doc_codigo = pcd.id_pago
-        //             LEFT JOIN pedidos_formas_pago fp ON fp.tip_pag_codigo = l.forma_pago_id
-        //             WHERE l.tipo_pago_id = 4
-        //             AND l.periodo_id = '$periodo'
-        //             AND l.estado = '1'
-        //             AND l.id_pedido = p.id_pedido
-        //         ) AS totalConvenioAprobado
 
-        //     FROM pedidos p
-        //     LEFT JOIN institucion i ON i.idInstitucion = p.id_institucion
-        //     LEFT JOIN usuario u ON u.idusuario = p.id_asesor
-        //     WHERE p.id_periodo = '$periodo'
-        //     AND p.estado = '1'
-        //     AND p.tipo = '0'
-        //     -- AND p.TotalVentaReal > 0
-        //     ORDER BY i.nombreInstitucion ASC
-        // ");
-        // return $query;
-        $query = DB::SELECT("SELECT
-                p.id_institucion,
-                p.id_pedido,
-                CONCAT(u.nombres,' ', u.apellidos) AS asesor,
-                i.nombreInstitucion,
-                p.contrato_generado,
-                p.TotalVentaReal AS ventaBruta,
-                p.descuento AS comision,
-                ROUND(p.TotalVentaReal - ((p.TotalVentaReal * p.descuento)/100), 2) AS ven_neta,
-                ROUND(
-                    IFNULL((
-                        SELECT SUM(l.doc_valor)
+        $periodos = DB::table('periodoescolar')
+            ->where('idperiodoescolar', '=', $periodo)
+            ->select('idperiodoescolar', 'periodoescolar')
+            ->first();
+
+        if ($periodos) {
+            // Extraer solo números (ej: Sierra2024 -> 2024)
+            preg_match_all('/\d+/', $periodos->periodoescolar, $matches);
+            $anio = implode('', $matches[0]);
+
+            $manejoPeriodos = DB::table('periodoescolar')
+                ->where('periodoescolar', 'like', '%' . $anio . '%')
+                ->select('idperiodoescolar', 'periodoescolar')
+                ->get();
+
+            if ($manejoPeriodos->isEmpty()) {
+                return response()->json(['status' => '0', 'message' => 'No se encontró el período'], 200);
+            }
+
+            $detalles = [];
+            // inicializar acumuladores globales
+            $totales = [
+                'venta_bruta'                                 => 0,
+                'venta_neta'                                  => 0,
+                'cantidad_bruta_devoluciones'                 => 0,
+                'total_general_bruto_devoluciones'            => 0,
+                'total_con_descuento_neta_con_devoluciones'   => 0,
+                'total_dev_neta'                              => 0,
+                'total_dev_bruta'                             => 0,
+                'totalcantidad_devoluciones'                  => 0,
+                'totalcantidad_ventasBrutas'                  => 0,
+                'totalCobrado'                                => 0,
+                'totalPagado'                                 => 0,
+                'totalPerseo'                                 => 0,
+                'totalCantidadPerseo'                         => 0,
+            ];
+
+            foreach ($manejoPeriodos as $item) {
+                $query = DB::selectOne("
+                    SELECT
+                        (SELECT SUM(v.ven_subtotal)
+                        FROM f_venta v
+                        WHERE v.periodo_id = '$item->idperiodoescolar'
+                        AND v.idtipodoc IN (1, 3, 4)
+                        AND v.est_ven_codigo <> 3) AS venta_bruta,
+
+                        (SELECT SUM(v.ven_valor)
+                        FROM f_venta v
+                        WHERE v.periodo_id = '$item->idperiodoescolar'
+                        AND v.idtipodoc IN (1, 3, 4)
+                        AND v.est_ven_codigo <> 3) AS venta_neta,
+
+                        (SELECT SUM(fdv.det_ven_cantidad - fdv.det_ven_dev)
+                        FROM f_detalle_venta fdv
+                        INNER JOIN f_venta fv ON fv.ven_codigo = fdv.ven_codigo
+                        AND fv.id_empresa = fdv.id_empresa
+                        WHERE fv.periodo_id = '$item->idperiodoescolar'
+                        AND fv.idtipodoc IN (1, 3, 4)
+                        AND fv.est_ven_codigo <> 3) AS cantidad_bruta_devoluciones,
+
+                        (SELECT SUM((fdv.det_ven_cantidad - fdv.det_ven_dev) * fdv.det_ven_valor_u)
+                        FROM f_detalle_venta fdv
+                        INNER JOIN f_venta fv ON fv.ven_codigo = fdv.ven_codigo
+                        AND fv.id_empresa = fdv.id_empresa
+                        WHERE fv.periodo_id = '$item->idperiodoescolar'
+                        AND fv.idtipodoc IN (1, 3, 4)
+                        AND fv.est_ven_codigo <> 3) AS total_general_bruto_devoluciones,
+
+                        (SELECT SUM((fdv.det_ven_cantidad - fdv.det_ven_dev) * fdv.det_ven_valor_u) * (1 - fv.ven_desc_por / 100)
+                        FROM f_detalle_venta fdv
+                        INNER JOIN f_venta fv ON fv.ven_codigo = fdv.ven_codigo
+                        AND fv.id_empresa = fdv.id_empresa
+                        WHERE fv.periodo_id = '$item->idperiodoescolar'
+                        AND fv.idtipodoc IN (1, 3, 4)
+                        AND fv.est_ven_codigo <> 3) AS total_con_descuento_neta_con_devoluciones,
+
+                        (SELECT SUM(fdv.det_ven_dev * fdv.det_ven_valor_u) * (1 - fv.ven_desc_por / 100)
+                        FROM f_detalle_venta fdv
+                        INNER JOIN f_venta fv ON fv.ven_codigo = fdv.ven_codigo
+                        AND fv.id_empresa = fdv.id_empresa
+                        WHERE fv.periodo_id = '$item->idperiodoescolar'
+                        AND fv.idtipodoc IN (1, 3, 4)
+                        AND fv.est_ven_codigo <> 3) AS total_dev_neta,
+
+                        (SELECT SUM(fdv.det_ven_dev * fdv.det_ven_valor_u)
+                        FROM f_detalle_venta fdv
+                        INNER JOIN f_venta fv ON fv.ven_codigo = fdv.ven_codigo
+                        AND fv.id_empresa = fdv.id_empresa
+                        WHERE fv.periodo_id = '$item->idperiodoescolar'
+                        AND fv.idtipodoc IN (1, 3, 4)
+                        AND fv.est_ven_codigo <> 3) AS total_dev_bruta,
+
+                        (SELECT SUM(fdv.det_ven_dev)
+                        FROM f_detalle_venta fdv
+                        INNER JOIN f_venta fv ON fv.ven_codigo = fdv.ven_codigo
+                        AND fv.id_empresa = fdv.id_empresa
+                        WHERE fv.periodo_id = '$item->idperiodoescolar'
+                        AND fv.idtipodoc IN (1, 3, 4)
+                        AND fv.est_ven_codigo <> 3) AS totalcantidad_devoluciones,
+
+                        (SELECT SUM(fdv.det_ven_cantidad)
+                        FROM f_detalle_venta fdv
+                        INNER JOIN f_venta fv ON fv.ven_codigo = fdv.ven_codigo
+                        AND fv.id_empresa = fdv.id_empresa
+                        WHERE fv.periodo_id = '$item->idperiodoescolar'
+                        AND fv.idtipodoc IN (1, 3, 4)
+                        AND fv.est_ven_codigo <> 3) AS totalcantidad_ventasBrutas,
+
+                        (SELECT SUM(a.abono_facturas + a.abono_notas) FROM abono a
+                        WHERE a.abono_estado = 0
+                        AND a.abono_periodo = '$item->idperiodoescolar'
+                        ) AS totalCobrado,
+                         
+                        (SELECT SUM(a.abono_facturas + a.abono_notas)
+                        FROM abono a
+                        WHERE a.abono_estado = 0
+                        AND a.abono_empresa=1
+                        AND a.abono_periodo = '$item->idperiodoescolar') AS totalCobradoProlipa,
+                        (SELECT SUM(a.abono_facturas + a.abono_notas)
+                        FROM abono a
+                        WHERE a.abono_estado = 0
+                        AND a.abono_empresa=3
+                        AND a.abono_periodo = '$item->idperiodoescolar') AS totalCobradoCalmed,
+
+                        (SELECT
+                            (
+                            ROUND(SUM(CASE WHEN l.tipo_pago_id = 1 AND l.ifAntAprobado = '0' AND l.estado = '1'
+                                            THEN l.doc_valor ELSE 0 END), 2)
+                            + ROUND(SUM(CASE WHEN l.tipo_pago_id = 1 AND l.ifAntAprobado = '1' AND l.estado = '1'
+                                            THEN l.doc_valor ELSE 0 END), 2)
+                            + ROUND(SUM(CASE WHEN l.tipo_pago_id = 2 AND l.estado = '1'
+                                            THEN l.doc_valor  ELSE 0 END), 2)
+                            + ROUND(SUM(CASE WHEN l.tipo_pago_id = 7 AND l.estado = '1'
+                                            THEN l.doc_valor ELSE 0 END), 2)
+                            + (
+                                SELECT COALESCE(SUM(pcd.valor),0)
+                                FROM pedidos_pagos_detalles pcd
+                                LEFT JOIN 1_4_documento_liq l2 ON l2.doc_codigo = pcd.id_pago
+                                LEFT JOIN pedidos_formas_pago fp ON fp.tip_pag_codigo = l2.forma_pago_id
+                                LEFT JOIN pedidos p2 ON p2.id_pedido = l2.id_pedido
+                                LEFT JOIN pedidos_convenios pc ON pc.id_pedido = p2.id_pedido
+                                WHERE l2.tipo_pago_id = 4
+                                AND l2.periodo_id = '$item->idperiodoescolar'
+                                AND p2.id_periodo = '$item->idperiodoescolar'
+                                AND pc.periodo_id = '$item->idperiodoescolar'
+                                AND pc.estado <> '2'
+                                AND p2.estado = '1'
+                                AND l2.estado = '1'
+                                AND p2.tipo = '0'
+                                AND p2.contrato_generado IS NOT NULL
+                            )
+                            ) AS totalGeneral
                         FROM `1_4_documento_liq` l
-                        WHERE l.periodo_id = '$periodo'
-                        AND l.estado = '1'
-                        AND l.tipo_pago_id IN (1,2,7)
-                        AND l.id_pedido = p.id_pedido
-                    ),0), 2
-                ) AS totalPagos,
-                (
-                    SELECT IFNULL(SUM(pcd.valor), 0)
-                    FROM pedidos_pagos_detalles pcd
-                    LEFT JOIN 1_4_documento_liq l ON l.doc_codigo = pcd.id_pago
-                    LEFT JOIN pedidos_formas_pago fp ON fp.tip_pag_codigo = l.forma_pago_id
-                    LEFT JOIN pedidos p2 ON p2.id_pedido = l.id_pedido
-                    LEFT JOIN pedidos_convenios pc ON pc.id_pedido = p2.id_pedido
-                    WHERE l.tipo_pago_id = 4
-                    AND l.periodo_id = '$periodo'
-                    AND l.estado = '1'
-                    AND l.id_pedido = p.id_pedido
-                    AND p2.estado = '1'
-                    AND p2.tipo = '0'
-                    AND p2.id_periodo = '$periodo'
-                    AND pc.periodo_id = '$periodo'
-                    AND pc.estado <> '2'
-                ) AS totalConvenioAprobado
-            FROM pedidos p
-            LEFT JOIN institucion i ON i.idInstitucion = p.id_institucion
-            LEFT JOIN usuario u ON u.idusuario = p.id_asesor
-            WHERE p.id_periodo = '$periodo'
-            AND p.estado = '1'
-            AND p.tipo = '0'
-            ORDER BY i.nombreInstitucion ASC
-        ");
-        foreach ($query as $q) {
-            // Crear propiedad totalPagosConvenio
-            $q->totalPagosConvenio = $q->totalPagos + $q->totalConvenioAprobado;
-            // Agregamos la propiedad calculada sin modificar la consulta SQL
-            $q->xPagar = $q->ven_neta - $q->totalPagosConvenio;
+                        LEFT JOIN pedidos p ON p.id_pedido = l.id_pedido
+                        WHERE l.periodo_id = '$item->idperiodoescolar'
+                        AND p.estado = '1'
+                        AND p.tipo = '0'
+                        AND p.contrato_generado IS NOT NULL) as totalPagado,
+
+                        (SELECT SUM(a.ven_valor) FROM  f_venta_agrupado a
+                            WHERE a.periodo_id = '$item->idperiodoescolar'
+                            AND a.est_ven_codigo = 0
+                            and a.estadoPerseo = 1
+                        ) AS totalPerseo,
+
+                        (SELECT SUM(d.det_ven_cantidad) FROM  f_venta_agrupado a
+                            JOIN f_detalle_venta_agrupado d ON d.id_factura = a.id_factura
+                            WHERE a.periodo_id = '$item->idperiodoescolar'
+                            AND a.est_ven_codigo = 0
+                            and a.estadoPerseo = 1
+                        ) AS totalCantidadPerseo;
+                ");
+
+                // Guardar detalle del periodo
+                $detalles[] = [
+                    'periodo' => $item->periodoescolar,
+                    'totales' => $query
+                ];
+
+                // Acumular en totales globales
+                foreach ($totales as $campo => $valor) {
+                    $totales[$campo] += $query->$campo ?? 0;
+                }
+
+                // ✅ formatear totales a 2 decimales
+                foreach ($totales as $campo => $valor) {
+                    $totales[$campo] = round($valor, 2);
+                }
+            }
+
+            return response()->json([
+                'detalle' => $detalles,   // lista de periodos con sus valores
+                'total'   => $totales,     // suma global de todos
+                'anio'    => $anio
+            ]);
         }
-        return $query;
+
+        return response()->json(['status' => '0', 'message' => 'No se encontró el período'], 200);
     }
+
+
 
     public function anularPedido(Request $request)
     {
@@ -2955,8 +3591,7 @@ class VentasController extends Controller
 
     public function cambioDesfasANotaCredito(Request $request)
     {
-        // Recibimos los datos desde el frontend
-        $id_ins_depacho = $request->id_ins_depacho;
+        // Recibimos los datos desde el frontend (ahora por cliente, no por institución)
         $empresa = $request->id_empresa;
         $data_detalle = $request->data_detalle;
         $tipoVenta = $request->tipoVenta; // Tipo de venta: 1 o 2
@@ -2967,9 +3602,9 @@ class VentasController extends Controller
             $data_detalle = json_decode($data_detalle, true);
         }
 
-        // Validación básica de los datos
-        if (!$id_ins_depacho || empty($data_detalle)) {
-            return response()->json(['message' => 'items inválidos.']);
+        // Validación básica de los datos (ahora validamos cliente en lugar de institución)
+        if (!$request->ven_cliente || empty($data_detalle)) {
+            return response()->json(['message' => 'Cliente o items inválidos.']);
         }
 
         // Iniciar la transacción
@@ -2987,7 +3622,7 @@ class VentasController extends Controller
                 'ven_transporte' => $request->ven_transporte, // Transporte recibido
                 'ven_valor' => $request->ven_valor, // Valor total recibido
                 'ven_subtotal' => $request->ven_subtotal, // Subtotal recibido
-                'institucion_id' => $id_ins_depacho,
+                // Ya no se usa institucion_id porque ahora es por cliente
                 'periodo_id' => $request->periodo_id, // Periodo recibido
                 'ven_cliente' => $request->ven_cliente, // Cliente recibido
                 'clientesidPerseo' => $request->clientesidPerseo, // Cliente de Perseo recibido
@@ -2995,8 +3630,8 @@ class VentasController extends Controller
                 'user_created' => $request->user_created, // Usuario que crea
                 'tip_ven_codigo' => $tipoVenta, // Tipo de venta (1 o 2)
                 'ven_tipo_inst' => $tipoVenta == 1 ? 'V' : 'L', // Tipo de venta según el valor recibido
-                'est_ven_codigo' => 14, // Tipo de venta según el valor recibido
-                'idtipodoc' => 16,
+                'est_ven_codigo' => 14, // Estado: Pendiente de asociar SRI
+                'idtipodoc' => 16, // Tipo de documento: Nota de Crédito
                 'ruc_cliente' => $request->ruc_cliente, // RUC del cliente
                 'fecha_notaCredito' => $request->ven_fecha,
             ];
@@ -3040,12 +3675,12 @@ class VentasController extends Controller
             // Si todo ha ido bien, hacemos commit
             DB::commit();
 
-            return response()->json(['message' => 'Prefacturas convertidas a notas correctamente.', 'status' => '0']);
+            return response()->json(['message' => 'Nota de crédito creada correctamente.', 'status' => '0']);
 
         } catch (\Exception $e) {
             // Si ocurre un error, hacemos rollback
             DB::rollBack();
-            return response()->json(['message' => 'Hubo un error al procesar las prefacturas: ' . $e->getMessage(), 'status' => '1', 'line' => $e->getLine()]);
+            return response()->json(['message' => 'Hubo un error al crear la nota de crédito: ' . $e->getMessage(), 'status' => '1', 'line' => $e->getLine()]);
         }
     }
 
@@ -3066,6 +3701,34 @@ class VentasController extends Controller
             })
             ->select('fdva.pro_codigo', DB::raw('SUM(fdva.det_ven_cantidad) as det_ven_cantidad'))
             ->where('fva.institucion_id', $request->institucion)
+            ->where('fva.id_empresa', $request->empresa)
+            ->where('fva.periodo_id', $request->periodo)
+            ->where('fva.est_ven_codigo', '<>', 3)
+            ->where('fva.idtipodoc',16)
+            ->groupBy('fdva.pro_codigo')
+            ->get();
+
+        // Devolver los resultados
+        return response()->json($resultados);
+    }
+
+    public function getCantidadNotaCreditoXcliente(Request $request)
+    {
+        // Validar los parámetros de entrada
+        $request->validate([
+            'cedula' => 'required',
+            'empresa' => 'required|integer',
+            'periodo' => 'required|integer',
+        ]);
+
+        // Ejecutar la consulta
+        $resultados = DB::table('f_venta as fva')
+            ->join('f_detalle_venta as fdva', function ($join) {
+                $join->on('fdva.ven_codigo', '=', 'fva.ven_codigo')
+                    ->on('fdva.id_empresa', '=', 'fva.id_empresa');
+            })
+            ->select('fdva.pro_codigo', DB::raw('SUM(fdva.det_ven_cantidad) as det_ven_cantidad'))
+            ->where('fva.ruc_cliente', $request->cedula)
             ->where('fva.id_empresa', $request->empresa)
             ->where('fva.periodo_id', $request->periodo)
             ->where('fva.est_ven_codigo', '<>', 3)
@@ -3123,6 +3786,53 @@ class VentasController extends Controller
         ]);
     }
 
+    public function getNotasIntercambioXcliente(Request $request)
+    {
+        $cedula = $request->input('cedula');
+        $periodo = $request->input('periodo');
+
+        // Ejecutar la primera consulta y obtener las notas
+        $notas = DB::select("SELECT
+                CASE
+                    WHEN COUNT(DISTINCT f.doc_intercambio) = 1 THEN
+                        MAX(f.doc_intercambio)
+                    ELSE
+                        GROUP_CONCAT(DISTINCT
+                            CASE WHEN f.doc_intercambio <> '' THEN f.doc_intercambio END
+                            ORDER BY f.doc_intercambio SEPARATOR ', ')
+                END AS intercambio_doc,
+                COUNT(f.doc_intercambio) AS total_intercambio
+            FROM f_detalle_venta f
+            LEFT JOIN f_venta fv ON fv.ven_codigo = f.ven_codigo AND fv.id_empresa = f.id_empresa
+            WHERE fv.ruc_cliente = ?
+            AND fv.periodo_id = ?
+            AND fv.idtipodoc = 1
+            AND f.doc_intercambio IS NOT NULL
+            GROUP BY fv.institucion_id, fv.periodo_id, fv.idtipodoc", [$cedula, $periodo]);
+
+        if (count($notas) === 0) {
+            $notas[] = (object)[
+                'intercambio_doc' => [],
+                'total_intercambio' => 0
+            ];
+        }
+
+        // Transformar el campo intercambio_doc en un arreglo de documentos
+        foreach ($notas as $key => $item) {
+            // Si intercambio_doc no está vacío
+            if (!empty($item->intercambio_doc)) {
+                // Convertir la cadena de documentos en un arreglo
+                $item->intercambio_doc = explode(',', $item->intercambio_doc);
+            }
+        }
+
+        // Devolver los datos con las notas y detalles integrados
+        return response()->json([
+            'notas' => $notas,
+        ]);
+    }
+
+
     public function getNotasCredito(Request $request)
     {
         $institucion = $request->input('institucion');
@@ -3135,6 +3845,23 @@ class VentasController extends Controller
             WHERE fv.institucion_id = ?
             AND fv.periodo_id = ?
             AND fv.idtipodoc = 16", [$institucion, $periodo]);
+
+        // Devolver los datos con las notas y detalles integrados
+        return $notas;
+    }
+
+    public function getNotasCreditoXcliente(Request $request)
+    {
+        $cedula = $request->input('cedula');
+        $periodo = $request->input('periodo');
+
+        // Ejecutar la primera consulta y obtener las notas
+        $notas = DB::select("SELECT DISTINCT fv.*
+            FROM f_detalle_venta f
+            LEFT JOIN f_venta fv ON fv.ven_codigo = f.ven_codigo AND fv.id_empresa = f.id_empresa
+            WHERE fv.ruc_cliente = ?
+            AND fv.periodo_id = ?
+            AND fv.idtipodoc = 16", [$cedula, $periodo]);
 
         // Devolver los datos con las notas y detalles integrados
         return $notas;
@@ -3156,6 +3883,26 @@ class VentasController extends Controller
         // Devolver los datos con las notas y detalles integrados
         return $notas;
     }
+
+
+    public function getNotasCLienteXcliente(Request $request)
+    {
+        $cedula = $request->input('cedula');
+        $periodo = $request->input('periodo');
+
+        // Ejecutar la primera consulta y obtener las notas
+        $notas = DB::select("SELECT fv.*, i.nombreInstitucion
+            FROM f_venta fv
+            LEFT JOIN institucion i ON i.idInstitucion = fv.institucion_id
+            WHERE fv.ruc_cliente = $cedula
+            AND fv.periodo_id = $periodo
+            AND (fv.est_ven_codigo = 13
+            OR fv.idtipodoc = 16)");
+
+        // Devolver los datos con las notas y detalles integrados
+        return $notas;
+    }
+
 
     public function Get_PREFacturaCodigos(Request $request)
     {
@@ -3505,28 +4252,7 @@ class VentasController extends Controller
 
         }
 
-    //     $query = DB::select("SELECT fv.institucion_id, fdv.*, p.pro_nombre,
-    //         SUM(fdv.det_ven_cantidad - fdv.det_ven_dev) AS cantidadReal, fv.tip_ven_codigo,
-    //         ROUND(fdv.det_ven_valor_u * SUM(fdv.det_ven_cantidad), 2) AS precio,
-    //         ROUND(fdv.det_ven_valor_u * SUM(fdv.det_ven_cantidad - fdv.det_ven_dev), 2) AS precioDevolucion,
-    //         SUM( fdv.det_ven_dev) AS cantidadDevuelta,
-    //         i.asesor_id
-    //         FROM f_detalle_venta fdv
-    //         INNER JOIN f_venta fv ON fv.ven_codigo = fdv.ven_codigo and fv.id_empresa = fdv.id_empresa
-    //         AND fv.id_empresa = fdv.id_empresa
-    //         INNER JOIN 1_4_cal_producto p ON fdv.pro_codigo = p.pro_codigo
-    //         INNER JOIN institucion i ON i.idInstitucion = fv.institucion_id
-    //         INNER JOIN pedidos pe ON pe.id_institucion = i.idInstitucion
-    //         INNER JOIN usuario u ON pe.id_asesor = u.idusuario
-    //         WHERE fv.periodo_id = ?
-    //         AND pe.id_asesor = ?
-    //         AND fv.id_empresa = ?
-    //         AND fv.idtipodoc IN (1, 3, 4)
-    //         AND fv.est_ven_codigo <> 3
-    //         and fv.tip_ven_codigo = 1
-    //         GROUP BY fdv.det_ven_codigo, p.pro_nombre",
-    //         [$request->periodo, $request->asesor, $request->empresa]);
-    // }
+
 
 
         // Consulta para buscar instituciones y periodo
@@ -3540,7 +4266,57 @@ class VentasController extends Controller
                 AND fv.id_empresa = ?",
                 [$request->periodo, $request->empresa]);
         }
-
+        //api:get/despachos?busquedaInstitucionPeriodoTodas=yes&periodo=25
+        if ($request->busquedaInstitucionPeriodoTodas) {
+            $query = DB::select("SELECT DISTINCT i.idInstitucion, i.nombreInstitucion
+                FROM f_venta fv
+                INNER JOIN institucion i ON fv.institucion_id = i.idInstitucion
+                WHERE fv.est_ven_codigo <> 3
+                AND fv.idtipodoc IN (1, 3, 4)
+                AND fv.periodo_id = ?
+                ORDER BY i.nombreInstitucion ASC
+                ",
+                [$request->periodo]);
+                foreach($query as $key => $item){
+                    $cantidadDespachada = DB::SELECT("SELECT fdv.*, p.pro_nombre, SUM(fdv.det_ven_cantidad - fdv.det_ven_dev) AS cantidadReal,
+                     fv.tip_ven_codigo,
+                    ROUND(fdv.det_ven_valor_u * SUM(fdv.det_ven_cantidad), 2) AS precio,
+                    ROUND(fdv.det_ven_valor_u * SUM(fdv.det_ven_cantidad - fdv.det_ven_dev), 2) AS precioDevolucion,
+                    ROUND(fdv.det_ven_valor_u * SUM(fdv.det_ven_dev), 2) AS precioSoloDevuelto,
+                    SUM( fdv.det_ven_dev) AS cantidadDevuelta
+                    FROM f_detalle_venta fdv
+                    INNER JOIN f_venta fv ON fv.ven_codigo = fdv.ven_codigo
+                        AND fv.id_empresa = fdv.id_empresa
+                    INNER JOIN 1_4_cal_producto p ON fdv.pro_codigo = p.pro_codigo
+                    WHERE fv.periodo_id = ?
+                    AND fv.institucion_id = ?
+                    AND fv.est_ven_codigo <> 3
+                    AND fv.idtipodoc IN (1, 3, 4)
+                    GROUP BY fdv.det_ven_codigo, p.pro_nombre, fv.tip_ven_codigo, fv.id_empresa",
+                    [$request->periodo, $item->idInstitucion]);
+                    //sumar det_ven_cantidad x institucion
+                    $det_ven_cantidad   = 0;
+                    $det_ven_dev        = 0;
+                    $cantidadReal       = 0;
+                    $totalFacturado     = 0;
+                    $totalFacturadoMenosDevuelto = 0;
+                    $totalSoloDevuelto   = 0;
+                    foreach($cantidadDespachada as $item2){
+                        $det_ven_cantidad   += $item2->det_ven_cantidad;
+                        $det_ven_dev        += $item2->det_ven_dev;
+                        $cantidadReal       += $item2->cantidadReal;
+                        $totalFacturado     += $item2->precio;
+                        $totalFacturadoMenosDevuelto += $item2->precioDevolucion;
+                        $totalSoloDevuelto   += $item2->precioSoloDevuelto;
+                    }
+                    $item->det_ven_cantidad = $det_ven_cantidad;
+                    $item->det_ven_dev      = $det_ven_dev;
+                    $item->cantidadReal     = $cantidadReal;
+                    $item->totalFacturado   = $totalFacturado;
+                    $item->totalSoloDevuelto =  $totalSoloDevuelto;
+                    $item->totalFacturadoMenosDevuelto = $totalFacturadoMenosDevuelto;
+                }
+        }
         if ($request->Xinstitucion) {
             $instituciones = explode(',', $request->institucion); // Soporte para múltiples instituciones
             $placeholders = implode(',', array_fill(0, count($instituciones), '?'));
@@ -3556,13 +4332,26 @@ class VentasController extends Controller
                 AND fv.id_empresa = ?
                 AND fv.institucion_id IN ($placeholders)
                 AND fv.est_ven_codigo <> 3
-                and fv.tip_ven_codigo <> 17
-                and fv.tip_ven_codigo <> 16
-                and fv.ven_desc_por < 100
+                AND fv.idtipodoc IN (1, 3, 4)
                 GROUP BY fdv.det_ven_codigo, p.pro_nombre, fv.tip_ven_codigo, fv.id_empresa",
                 array_merge([$request->periodo, $request->empresa], $instituciones));
         }
-
+        if ($request->XinstitucionTodo) {
+            $query = DB::select("SELECT fdv.*, p.pro_nombre, SUM(fdv.det_ven_cantidad - fdv.det_ven_dev) AS cantidadReal, fv.tip_ven_codigo,
+                ROUND(fdv.det_ven_valor_u * SUM(fdv.det_ven_cantidad), 2) AS precio,
+                ROUND(fdv.det_ven_valor_u * SUM(fdv.det_ven_cantidad - fdv.det_ven_dev), 2) AS precioDevolucion,
+                SUM( fdv.det_ven_dev) AS cantidadDevuelta
+                FROM f_detalle_venta fdv
+                INNER JOIN f_venta fv ON fv.ven_codigo = fdv.ven_codigo
+                    AND fv.id_empresa = fdv.id_empresa
+                INNER JOIN 1_4_cal_producto p ON fdv.pro_codigo = p.pro_codigo
+                WHERE fv.periodo_id = ?
+                AND fv.institucion_id = ?
+                AND fv.est_ven_codigo <> 3
+                AND fv.idtipodoc IN (1, 3, 4)
+                GROUP BY fdv.det_ven_codigo, p.pro_nombre, fv.tip_ven_codigo, fv.id_empresa",
+                [$request->periodo, $request->institucion]);
+        }
         //buscar cliente y periodo
         if($request->busquedaClientePeriodo){
             $query = DB::select("SELECT DISTINCT v.ruc_cliente, CONCAT(u.nombres, '', u.apellidos) AS cliente FROM f_venta v
@@ -3585,11 +4374,9 @@ class VentasController extends Controller
             WHERE fv.periodo_id = $request->periodo
             and fv.id_empresa = $request->empresa
             AND fv.ruc_cliente = $request->cliente
-            -- AND fv.idtipodoc IN (1, 3, 4)
+            AND fv.idtipodoc IN (1, 3, 4)
             AND fv.est_ven_codigo <> 3
-            and fv.tip_ven_codigo <> 17
-            and fv.tip_ven_codigo <> 16
-            and fv.ven_desc_por < 100
+
             GROUP BY fdv.det_ven_codigo, p.pro_nombre;
 
         ");
@@ -4584,6 +5371,59 @@ public function ReporteContratos23_24(){
             ->get();
 
         return response()->json($contratos);
+    }
+
+    /**
+     * Consultar stock de libros por códigos de productos
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function consultarStockLibros(Request $request)
+    {
+        try {
+            // Validar que se envíen los códigos
+            $codigos = $request->input('codigos', []);
+            
+            if (empty($codigos)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'No se proporcionaron códigos de productos'
+                ], 400);
+            }
+            
+            // Si viene como string separado por comas, convertir a array
+            if (is_string($codigos)) {
+                $codigos = explode(',', $codigos);
+            }
+            
+            // Limpiar y normalizar los códigos
+            $codigos = array_map('trim', $codigos);
+            $codigos = array_filter($codigos); // Eliminar valores vacíos
+            
+            if (empty($codigos)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'No se proporcionaron códigos válidos'
+                ], 400);
+            }
+            
+            // Consultar stock de los productos
+            $productos = DB::table('1_4_cal_producto')
+                ->whereIn('pro_codigo', $codigos)
+                ->select('pro_codigo', 'pro_reservar', 'pro_stock', 'pro_nombre', 'pro_estado')
+                ->get();
+            
+            return response()->json([
+                'status' => 'success',
+                'data' => $productos
+            ], 200);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error al consultar el stock: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
 }

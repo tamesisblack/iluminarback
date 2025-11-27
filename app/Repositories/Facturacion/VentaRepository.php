@@ -267,18 +267,27 @@ class  VentaRepository extends BaseRepository
         $query = DB::select("SELECT
                 ls.codigo_liquidacion,
                 l.nombrelibro,
-                COUNT(*) AS valor
+                s.nombre_serie,
+                fp.pfn_pvp AS precio,
+                COUNT(*) AS valor,
+                COUNT(*) AS cantidad_despachada,
+                (COUNT(*) * fp.pfn_pvp) AS despachoBodega
             FROM codigoslibros c
             LEFT JOIN libros_series ls ON ls.idLibro = c.libro_idlibro
             LEFT JOIN libro l ON l.idlibro = ls.idLibro
+            LEFT JOIN series s ON s.id_serie = ls.id_serie
+             LEFT JOIN pedidos_formato_new fp
+			    ON fp.idlibro = c.libro_idlibro
+			   AND fp.idperiodoescolar = '$periodo'
             LEFT JOIN institucion iv ON iv.idInstitucion = c.bc_institucion
             WHERE
                 c.prueba_diagnostica = '0'
                 AND c.estado_liquidacion IN ('0', '1', '2')
                 AND c.bc_periodo = ?
                 AND (c.venta_estado = '1' OR c.venta_estado = '0')
-                AND c.combo IS NULL
-                AND c.codigo_combo IS NULL
+                 AND (c.combo IS NULL OR  c.codigo_combo IS null)
+                AND c.codigo_proforma IS NOT NULL
+                -- AND c.codigo_combo IS NULL
                 $condicion
             GROUP BY ls.codigo_liquidacion, l.nombrelibro
             ORDER BY ls.codigo_liquidacion
@@ -286,25 +295,7 @@ class  VentaRepository extends BaseRepository
 
         return $query;
     }
-    // public function getDespachoBodegaLista($periodo,  $tipoInstitucionIncluir = null){
-    //     $query = DB::SELECT("SELECT
-    //             ls.codigo_liquidacion,
-    //             l.nombrelibro,
-    //             COUNT(*) AS valor
-    //         FROM codigoslibros c
-    //         LEFT JOIN libros_series ls ON ls.idLibro = c.libro_idlibro
-    //         LEFT JOIN libro l ON l.idlibro = ls.idLibro
-    //         WHERE
-    //             c.prueba_diagnostica = '0'
-    //             AND c.estado_liquidacion IN ('0', '1', '2')
-    //             AND c.bc_periodo = '$periodo'
-    //             AND c.venta_estado = '2'
-    //         GROUP BY ls.codigo_liquidacion, l.nombrelibro
-    //         ORDER BY ls.codigo_liquidacion;
 
-    //     ");
-    //     return $query;
-    // }
     public function getDespachoBodegaLista($periodo, $tipoInstitucionIncluir = null)
     {
         $condicion = "";
@@ -317,18 +308,27 @@ class  VentaRepository extends BaseRepository
         $query = DB::select("SELECT
                 ls.codigo_liquidacion,
                 l.nombrelibro,
-                COUNT(*) AS valor
+                s.nombre_serie,
+                fp.pfn_pvp AS precio,
+                COUNT(*) AS valor,
+                COUNT(*) AS cantidad_despachada,
+                (COUNT(*) * fp.pfn_pvp) AS despachoBodega
             FROM codigoslibros c
             LEFT JOIN libros_series ls ON ls.idLibro = c.libro_idlibro
             LEFT JOIN libro l ON l.idlibro = ls.idLibro
+            LEFT JOIN series s ON s.id_serie = ls.id_serie
+             LEFT JOIN pedidos_formato_new fp
+			    ON fp.idlibro = c.libro_idlibro
+			   AND fp.idperiodoescolar = '$periodo'
             LEFT JOIN institucion il ON il.idInstitucion = c.venta_lista_institucion
             WHERE
                 c.prueba_diagnostica = '0'
                 AND c.estado_liquidacion IN ('0', '1', '2')
                 AND c.bc_periodo = ?
                 AND c.venta_estado = '2'
-                AND c.combo IS NULL
-                AND c.codigo_combo IS NULL
+                AND (c.combo IS NULL OR  c.codigo_combo IS null)
+                AND c.codigo_proforma IS NOT NULL
+                -- AND c.codigo_combo IS NULL
                 $condicion
             GROUP BY ls.codigo_liquidacion, l.nombrelibro
             ORDER BY ls.codigo_liquidacion
@@ -336,24 +336,6 @@ class  VentaRepository extends BaseRepository
 
         return $query;
     }
-
-    // public function getDespachoBodegaTodo($periodo){
-    //     $query = DB::SELECT("SELECT
-    //             ls.codigo_liquidacion,
-    //             l.nombrelibro,
-    //             COUNT(*) AS valor
-    //         FROM codigoslibros c
-    //         LEFT JOIN libros_series ls ON ls.idLibro = c.libro_idlibro
-    //         LEFT JOIN libro l ON l.idlibro = ls.idLibro
-    //         WHERE
-    //             c.prueba_diagnostica = '0'
-    //             AND c.estado_liquidacion IN ('0', '1', '2')
-    //             AND c.bc_periodo = '$periodo'
-    //         GROUP BY ls.codigo_liquidacion, l.nombrelibro
-    //         ORDER BY ls.codigo_liquidacion;
-    //     ");
-    //     return $query;
-    // }
 
     public function getDespachoBodegaTodo($periodo, $tipoInstitucionIncluir = null) {
         $condicion = "";
@@ -370,20 +352,33 @@ class  VentaRepository extends BaseRepository
         $query = DB::select("SELECT
                 ls.codigo_liquidacion,
                 l.nombrelibro,
-                COUNT(*) AS valor
+                s.nombre_serie,
+                CASE
+                    WHEN c.estado_liquidacion = 2 THEN 0
+                    WHEN c.plus = 1 THEN 29.90
+                    ELSE fp.pfn_pvp
+                END AS precio,
+                COUNT(*) AS valor,
+                COUNT(*) AS cantidad_despachada,
+                (COUNT(*) * fp.pfn_pvp) AS despachoBodega
             FROM codigoslibros c
             LEFT JOIN libros_series ls ON ls.idLibro = c.libro_idlibro
             LEFT JOIN libro l ON l.idlibro = ls.idLibro
+            LEFT JOIN series s ON s.id_serie = ls.id_serie
+            LEFT JOIN pedidos_formato_new fp
+			    ON fp.idlibro = c.libro_idlibro
+			   AND fp.idperiodoescolar = '$periodo'
             LEFT JOIN institucion il ON il.idInstitucion = c.venta_lista_institucion
             LEFT JOIN institucion iv ON iv.idInstitucion = c.bc_institucion
             WHERE
                 c.prueba_diagnostica = '0'
                 AND c.estado_liquidacion IN ('0', '1', '2')
                 AND c.bc_periodo = ?
-                AND c.combo IS NULL
-                AND c.codigo_combo IS NULL
+                AND (c.combo IS NULL OR  c.codigo_combo IS null)
+                AND c.codigo_proforma IS NOT NULL
+                -- AND c.codigo_combo IS NULL
                 $condicion
-            GROUP BY ls.codigo_liquidacion, l.nombrelibro
+            GROUP BY ls.codigo_liquidacion, l.nombrelibro, s.nombre_serie
             ORDER BY ls.codigo_liquidacion
         ", [$periodo]);
 

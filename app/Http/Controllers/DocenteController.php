@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\InstitucionFueraProlipa;
+use App\Models\Usuario;
 use DB;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx\Rels;
 
@@ -73,16 +74,16 @@ class DocenteController extends Controller
     public function docentesInstitucion($id)
     {
         $usuarios = User::select(
-            'usuario.idusuario', 
-            'usuario.cedula', 
-            'usuario.nombres', 
-            'usuario.apellidos', 
-            'usuario.name_usuario', 
-            'usuario.email', 
-            'usuario.telefono', 
-            'usuario.estado_idEstado', 
-            'usuario.id_group', 
-            'usuario.institucion_idInstitucion', 
+            'usuario.idusuario',
+            'usuario.cedula',
+            'usuario.nombres',
+            'usuario.apellidos',
+            'usuario.name_usuario',
+            'usuario.email',
+            'usuario.telefono',
+            'usuario.estado_idEstado',
+            'usuario.id_group',
+            'usuario.institucion_idInstitucion',
             'usuario.foto_user',
             'i.idInstitucion',
             DB::RAW('MAX(se.id_evaluacion) AS id_evaluacion')
@@ -92,21 +93,66 @@ class DocenteController extends Controller
         ->where('institucion_idInstitucion', $id)
         ->whereIn('id_group', [6, 13])
         ->groupBy(
-            'usuario.idusuario', 
-            'usuario.cedula', 
-            'usuario.nombres', 
-            'usuario.apellidos', 
-            'usuario.name_usuario', 
-            'usuario.email', 
-            'usuario.telefono', 
-            'usuario.estado_idEstado', 
-            'usuario.id_group', 
-            'usuario.institucion_idInstitucion', 
+            'usuario.idusuario',
+            'usuario.cedula',
+            'usuario.nombres',
+            'usuario.apellidos',
+            'usuario.name_usuario',
+            'usuario.email',
+            'usuario.telefono',
+            'usuario.estado_idEstado',
+            'usuario.id_group',
+            'usuario.institucion_idInstitucion',
             'usuario.foto_user',
             'i.idInstitucion'
         )
         ->get();
-        
+
+        return $usuarios;
+    }
+    public function docentesInstitucionSalle($id,$evaluacion){
+        $usuarios = User::select(
+            'usuario.idusuario',
+            'usuario.cedula',
+            'usuario.nombres',
+            'usuario.apellidos',
+            'usuario.name_usuario',
+            'usuario.email',
+            'usuario.telefono',
+            'usuario.estado_idEstado',
+            'usuario.id_group',
+            'usuario.institucion_idInstitucion',
+            'usuario.foto_user',
+            'i.idInstitucion',
+            DB::RAW('MAX(se.id_evaluacion) AS id_evaluacion')
+        )
+        ->leftJoin('salle_evaluaciones as se', 'se.id_usuario', '=', 'usuario.idusuario')
+        ->leftjoin('institucion as i', 'i.idInstitucion', '=', 'usuario.institucion_idInstitucion')
+        ->where('institucion_idInstitucion', $id)
+        ->whereIn('id_group', [6, 13])
+        ->groupBy(
+            'usuario.idusuario',
+            'usuario.cedula',
+            'usuario.nombres',
+            'usuario.apellidos',
+            'usuario.name_usuario',
+            'usuario.email',
+            'usuario.telefono',
+            'usuario.estado_idEstado',
+            'usuario.id_group',
+            'usuario.institucion_idInstitucion',
+            'usuario.foto_user',
+            'i.idInstitucion'
+        )
+        ->get();
+        // traer las evaluaciones resueltas
+        foreach($usuarios as $key => $item){
+            $evaluacionResuelta = DB::SELECT("SELECT * FROM salle_evaluaciones e
+            WHERE e.id_usuario ='$item->idusuario'
+            AND e.estado = '2'
+            AND e.n_evaluacion = '$evaluacion'");
+            $usuarios[$key]->intentosEvaluaciones = $evaluacionResuelta;
+        }
         return $usuarios;
     }
 
@@ -133,7 +179,8 @@ class DocenteController extends Controller
         $agenda = DB::SELECT("SELECT a.periodo_id,a.institucion_id_temporal,a.estado,i.nombreInstitucion, a.id,
         a.id_usuario, a.nombre_institucion_temporal,a.estado_institucion_temporal,a.fecha_que_visita,
          CONCAT(a.title, ' (', a.hora_inicio, ' - ', a.hora_fin, ')' ) as title, a.label, a.classes,
-          a.startDate, a.endDate, a.hora_inicio, a.hora_fin, a.url, a.opciones, a.institucion_id
+          a.startDate, a.endDate, a.hora_inicio, a.hora_fin, a.url, a.opciones, a.institucion_id,
+          a.longitud, a.latitud, a.fecha_captura_longitud
           FROM agenda_usuario a
          LEFT JOIN institucion i ON a.institucion_id = i.idInstitucion
          WHERE a.id_usuario = $docente
@@ -144,15 +191,34 @@ class DocenteController extends Controller
 
     public function save_agenda_docente(Request $request)
     {
+        $idusuario = $request->idusuario;
+        $userData  = Usuario::find($idusuario);
+        // return ["status" => "0","message" => "Debe seleccionar una opcion"];
+        if($userData->id_group == 11){
+             if($request->opciones == "undefined" || $request->opciones == null){
+                return ["status" => "0","message" => "Debe seleccionar una opcion"];
+            }
+        }
+
         if( $request->id != 0 ){
             $agenda = Agenda::find($request->id);
             if($request->finalizar){
                 $agenda->estado            = "1";
                 $agenda->fecha_que_visita  = $request->fecha_que_visita;
             }
+            // si ya tiene latitud y longitud no la actualiza
+            if($agenda->latitud){}
+            else{
+                $agenda->latitud  = $request->latitud;
+                $agenda->longitud = $request->longitud;
+                $agenda->fecha_captura_longitud = date('Y-m-d H:i:s');
+            }
 
         }else{
             $agenda = new Agenda();
+            $agenda->latitud  = $request->latitud;
+            $agenda->longitud = $request->longitud;
+            $agenda->fecha_captura_longitud = date('Y-m-d H:i:s');
         }
         //si crean una insitucion temporal
         if($request->estado_institucion_temporal == 1){
@@ -185,7 +251,6 @@ class DocenteController extends Controller
         $agenda->url = $request->url;
         $agenda->opciones = $request->opciones;
         $agenda->estado_institucion_temporal =$request->estado_institucion_temporal;
-
 
         $agenda->save();
         //guardar en caso que sea otra editorial
